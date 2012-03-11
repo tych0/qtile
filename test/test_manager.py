@@ -10,13 +10,14 @@ import libqtile.command
 import libqtile.widget
 import libqtile.manager
 import libqtile.hook
+import libqtile.confreader
 import utils
 from utils import Xephyr
 from nose.tools import assert_raises
 from nose.plugins.attrib import attr
 
 
-class TestConfig:
+class TestConfig(libqtile.confreader.File):
     groups = [
         libqtile.manager.Group("a"),
         libqtile.manager.Group("b"),
@@ -55,7 +56,7 @@ class TestConfig:
     follow_mouse_focus = True
 
 
-class BareConfig:
+class BareConfig(libqtile.confreader.File):
     groups = [
         libqtile.manager.Group("a"),
         libqtile.manager.Group("b"),
@@ -772,7 +773,7 @@ def test_dheight():
     assert s.dheight == 80
 
 
-class _Config:
+class _Config(libqtile.confreader.File):
     groups = [
         libqtile.manager.Group("a"),
         libqtile.manager.Group("b"),
@@ -810,8 +811,6 @@ class _Config:
 class ClientNewStaticConfig(_Config):
     @staticmethod
     def main(c):
-        import libqtile.hook
-
         def client_new(c):
             c.static(0)
         libqtile.hook.subscribe.client_new(client_new)
@@ -832,8 +831,6 @@ if utils.whereis("gkrellm"):
 class ToGroupConfig(_Config):
     @staticmethod
     def main(c):
-        import libqtile.hook
-
         def client_new(c):
             c.togroup("d")
         libqtile.hook.subscribe.client_new(client_new)

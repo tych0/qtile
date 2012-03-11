@@ -100,3 +100,4 @@ cursor_warp = False
 floating_layout = layout.Floating()
 mouse = ()
 auto_fullscreen = True
+widget_defaults = {}

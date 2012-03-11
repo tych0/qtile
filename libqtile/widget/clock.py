@@ -18,6 +18,9 @@ class Clock(base._TextBox):
         self.fmt = fmt
         self.timeout_add(1, self.update)
 
+    def _configure(self, qtile, bar):
+        base._TextBox._configure(self, qtile, bar)
+
     def update(self):
         if self.configured:
             now = datetime.datetime.now().strftime(self.fmt)

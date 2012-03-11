@@ -7,15 +7,6 @@ class TextBox(base._TextBox):
         A flexible textbox that can be updated from bound keys, scripts and
         qsh.
     """
-    defaults = [
-        ("font", "Arial", "Text font"),
-        ("fontsize", None, "Font pixel size. Calculated if None."),
-        ("fontshadow", None,
-            "font shadow color, default is None(no shadow)"),
-        ("padding", None, "Padding left and right. Calculated if None."),
-        ("foreground", "#ffffff", "Foreground colour.")
-    ]
-
     def __init__(self, name, text=" ", width=bar.CALCULATED, **config):
         """
             - name: Name for this widget. Used to address the widget from
@@ -25,8 +16,6 @@ class TextBox(base._TextBox):
         """
         self.name = name
         base._TextBox.__init__(self, text, width, **config)
-        self.add_defaults(defaults)
-        self.load(config)
 
     def update(self, text):
         self.text = text
