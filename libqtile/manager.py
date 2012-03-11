@@ -1,3 +1,4 @@
+# vim: tabstop=4 shiftwidth=4 expandtab
 # Copyright (c) 2008, Aldo Cortesi. All rights reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,6 +30,26 @@ import command, utils, window, hook
 
 class QtileError(Exception): pass
 
+class Configurable(object):
+    global_defaults = {}
+    def __init__(self):
+        self._defaults = {}
+
+    def add_defaults(self, defaults):
+        """
+            Add defaults to this object, overwriting any which already exist.
+        """
+        for (prop, value, _) in defaults:
+            self._defaults[prop] = value
+
+    def load(self, config):
+        """
+            Loads a dict of attributes, using specified defaults, onto target.
+            Precedence is: supplied config, global_defaults, local_defaults.
+        """
+        for (k, v) in self._defaults.items():
+            val = config.get(k, self.global_defaults.get(k, v))
+            setattr(self, k, val)
 
 class Defaults:
     def __init__(self, *defaults):

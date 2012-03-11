@@ -12,12 +12,7 @@ class Battery(base._TextBox):
     """
         A simple but flexible text-based clock.
     """
-    defaults = manager.Defaults(
-        ("font", "Arial", "Clock font"),
-        ("fontsize", None, "Clock pixel size. Calculated if None."),
-        ("padding", None, "Clock padding. Calculated if None."),
-        ("background", "000000", "Background colour"),
-        ("foreground", "ffffff", "Foreground colour"),
+    defaults = [
         ("low_foreground", "FF0000", "font when battery is low"),
         ("format", "{char} {percent:2.0%} {hour:d}:{min:02d}", "Display format"),
         ("battery_name", "BAT0", "ACPI name of a battery, usually BAT0"),
@@ -28,11 +23,11 @@ class Battery(base._TextBox):
         ("update_delay",1,"The delay in seconds between updates"),
         ("charge_char","^","Character to indicate the battery is charging"),
         ("discharge_char","V","Character to indicate the battery is discharging"),
-        
-    )
+    ]
     def __init__(self, low_percentage=0.10, width=bar.CALCULATED, **config):
         base._TextBox.__init__(self, "BAT", **config)
         self.low_percentage = low_percentage
+        self.add_defaults(Battery.defaults)
 
     def _configure(self, qtile, bar):
         base._TextBox._configure(self, qtile, bar)

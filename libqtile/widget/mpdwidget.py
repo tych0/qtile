@@ -19,13 +19,6 @@ class Mpd(base._TextBox):
     """
         An mpd widget
     """
-    defaults = manager.Defaults(
-        ("font", "Arial", "Mpd widget font"),
-        ("fontsize", None, "Mpd widget pixel size. Calculated if None."),
-        ("padding", None, "Mpd widget padding. Calculated if None."),
-        ("background", "000000", "Background colour"),
-        ("foreground", "ffffff", "Foreground colour")
-    )
     def __init__(self, width=bar.CALCULATED, host='localhost', port=6600, password=False, msg_nc='NC', **config):
         """
             - host: host to connect to
@@ -40,6 +33,7 @@ class Mpd(base._TextBox):
         self.password = password
         self.msg_nc = msg_nc
         base._TextBox.__init__(self, " ", width, **config)
+        self.load(config)
         self.client = MPDClient()
         self.connected = False
         self.connect()

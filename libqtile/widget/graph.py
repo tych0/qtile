@@ -12,10 +12,9 @@ __all__ = [
 
 class _Graph(base._Widget):
     fixed_upper_bound = False
-    defaults = manager.Defaults(
+    defaults = [
         ("graph_color", "18BAEB", "Graph color"),
         ("fill_color", "1667EB.3", "Fill color for linefill graph"),
-        ("background", "000000", "Widget background"),
         ("border_color", "215578", "Widget border color"),
         ("border_width", 2, "Widget background"),
         ("margin_x", 3, "Margin X"),
@@ -24,12 +23,14 @@ class _Graph(base._Widget):
         ("frequency", 1, "Update frequency in seconds"),
         ("type", "linefill", "'box', 'line', 'linefill'"),
         ("line_width", 3, "Line width"),
-    )
+    ]
 
     def __init__(self, width = 100, **config):
         base._Widget.__init__(self, width, **config)
         self.values = [0]*self.samples
         self.maxvalue = 0
+        self.add_Defaults(_Graph.defaults)
+        self.load(config)
 
     @property
     def graphwidth(self):

@@ -11,17 +11,10 @@ class Mpris(base._TextBox):
     player. It should work with all players which implement a reasonably correct
     version of MPRIS, though I have only tested it with clementine. """
 
-    defaults = manager.Defaults(
-            ("font", "Arial", "Mpd widget font"),
-            ("fontsize", None, "Mpd widget pixel size. Calculated if None."),
-            ("padding", None, "Mpd widget padding. Calculated if None."),
-            ("background", "000000", "Background colour"),
-            ("foreground", "ffffff", "Foreground colour")
-        )
-
     def __init__(self, name="clementine", width=bar.CALCULATED,
                  objname='org.mpris.clementine', **config):
         base._TextBox.__init__(self, " ", width, **config)
+        self.load(config)
 
         # we need a main loop to get event signals; we just piggyback on qtile's
         # main loop
