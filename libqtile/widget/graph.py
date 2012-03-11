@@ -29,7 +29,7 @@ class _Graph(base._Widget):
         base._Widget.__init__(self, width, **config)
         self.values = [0]*self.samples
         self.maxvalue = 0
-        self.add_Defaults(_Graph.defaults)
+        self.add_defaults(_Graph.defaults)
         self.load(config)
 
     @property
