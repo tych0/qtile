@@ -7,7 +7,6 @@ class WindowName(base._TextBox):
     """
     def __init__(self, **config):
         base._TextBox.__init__(self, width=bar.STRETCH, **config)
-        self.load(config)
 
     def _configure(self, qtile, bar):
         base._TextBox._configure(self, qtile, bar)

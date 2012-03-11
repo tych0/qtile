@@ -33,7 +33,6 @@ class Mpd(base._TextBox):
         self.password = password
         self.msg_nc = msg_nc
         base._TextBox.__init__(self, " ", width, **config)
-        self.load(config)
         self.client = MPDClient()
         self.connected = False
         self.connect()

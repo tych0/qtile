@@ -15,7 +15,6 @@ class TextBox(base._TextBox):
         """
         self.name = name
         base._TextBox.__init__(self, text, width, **config)
-        self.load(config)
 
     def update(self, text):
         self.text = text

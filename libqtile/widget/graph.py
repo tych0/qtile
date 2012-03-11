@@ -30,7 +30,6 @@ class _Graph(base._Widget):
         self.values = [0]*self.samples
         self.maxvalue = 0
         self.add_defaults(_Graph.defaults)
-        self.load(config)
 
     @property
     def graphwidth(self):

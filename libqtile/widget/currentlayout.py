@@ -4,7 +4,6 @@ from .. import manager, bar, hook
 class CurrentLayout(base._TextBox):
     def __init__(self, width = bar.CALCULATED, **config):
         base._TextBox.__init__(self, "", width, **config)
-        self.load(config)
 
     def _configure(self, qtile, bar):
         base._TextBox._configure(self, qtile, bar)

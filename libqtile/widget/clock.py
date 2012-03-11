@@ -15,7 +15,6 @@ class Clock(base._TextBox):
         """
         self.fmt = fmt
         base._TextBox.__init__(self, " ", width, **config)
-        self.load(config)
 
     def _configure(self, qtile, bar):
         base._TextBox._configure(self, qtile, bar)

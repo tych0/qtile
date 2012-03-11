@@ -27,7 +27,7 @@ class _Widget(command.CommandObject, manager.Configurable):
             width: bar.STRETCH, bar.CALCULATED, or a specified width.
         """
         command.CommandObject.__init__(self)
-        manager.Configurable.__init__(self)
+        manager.Configurable.__init__(self, **config)
         self.add_defaults(_Widget.defaults)
         if width in (bar.CALCULATED, bar.STRETCH):
             self.width_type = width

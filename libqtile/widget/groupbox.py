@@ -65,7 +65,6 @@ class AGroupBox(_GroupBase):
     def __init__(self, **config):
         _GroupBase.__init__(self, **config)
         self.add_defaults(AGroupBox.defaults)
-        self.load(config)
 
     def click(self, x, y, button):
         self.bar.screen.group.cmd_nextgroup()
@@ -101,7 +100,6 @@ class GroupBox(_GroupBase):
     def __init__(self, **config):
         _GroupBase.__init__(self, **config)
         self.add_defaults(GroupBox.defaults)
-        self.load(config)
 
     def click(self, x, y, button):
         group = None

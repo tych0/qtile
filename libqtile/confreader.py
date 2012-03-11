@@ -70,3 +70,4 @@ class File(Config):
             self.floating_layout = Floating()
         self.screens = globs.get("screens")
         self.main = globs.get("main")
+        self.widget_defaults = globs.get("widget_defaults")

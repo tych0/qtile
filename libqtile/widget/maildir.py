@@ -29,7 +29,6 @@ class Maildir(base._TextBox):
         self._separator = separator
         self._timeout = timeout
         self.text = self.format_text(self.mailbox_state())
-        self.load(config)
 
     def _configure(self, qtile, bar):
         base._TextBox._configure(self, qtile, bar)
