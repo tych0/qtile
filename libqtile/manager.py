@@ -428,6 +428,9 @@ class Group(command.CommandObject):
             return
         if win and not win in self.windows:
             return
+        #### XXX: TODO: test this... should not allow new windows to steal focus from prompt widgets
+        if any(map(lambda x: x.saved_focus if x else None, [self.top, self.botttom, self.left, self.right])):
+            return
         if win:
             self.currentWindow = win
             if win.floating:
