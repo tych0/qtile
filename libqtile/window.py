@@ -251,8 +251,8 @@ class _Window(command.CommandObject):
             float_info = self._float_info,
             maximized = self._float_state == MAXIMIZED,
             minimized = self._float_state == MINIMIZED,
-            fullscreen = self._float_state == FULLSCREEN
-
+            fullscreen = self._float_state == FULLSCREEN,
+            float_state = self._float_state,
         )
 
     @property
@@ -557,6 +557,8 @@ class Window(_Window):
     _windowMask = EventMask.StructureNotify |\
                   EventMask.PropertyChange |\
                   EventMask.EnterWindow |\
+                  EventMask.ButtonPress |\
+                  EventMask.ButtonRelease |\
                   EventMask.FocusChange
     # Set when this object is being retired.
     defunct = False
@@ -830,14 +832,17 @@ class Window(_Window):
 
         return False
 
-    def handle_EnterNotify(self, e):
-        hook.fire("client_mouse_enter", self)
-        if self.qtile.config.follow_mouse_focus and \
-                        self.group.currentWindow != self:
+    def _handler_focus(self):
+        if self.group.currentWindow != self:
             self.group.focus(self, False)
         if self.group.screen and self.qtile.currentScreen != self.group.screen:
             self.qtile.toScreen(self.group.screen.index)
         return True
+
+    def handle_EnterNotify(self, e):
+        hook.fire("client_mouse_enter", self)
+        if self.qtile.config.follow_mouse_focus:
+            self._handler_focus()
 
     def handle_ConfigureRequest(self, e):
         if self.qtile._drag and self.qtile.currentWindow == self:
@@ -894,6 +899,10 @@ class Window(_Window):
         elif self.qtile.debug:
             print >> sys.stderr, "Unknown window property: ", name
         return False
+
+    def handle_ButtonRelease(self, e):
+        if e.detail == '1':
+            self._handler_focus()
 
     def _items(self, name):
         if name == "group":
