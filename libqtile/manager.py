@@ -19,6 +19,8 @@
 # SOFTWARE.
 
 from libqtile.log_utils import init_log
+from state import QtileState
+from StringIO import StringIO
 from xcb.xproto import EventMask
 import atexit
 import command
@@ -28,6 +30,7 @@ import hook
 import logging
 import os
 import os.path
+import pickle
 import sys
 import traceback
 import utils
@@ -697,8 +700,15 @@ class Qtile(command.CommandObject):
     _exit = False
     _abort = False
 
-    def __init__(self, config,
-                 displayName=None, fname=None, no_spawn=False, log=None):
+    def __init__(
+        self,
+        config,
+        displayName=None,
+        fname=None,
+        no_spawn=False,
+        log=None,
+        state=None,
+     ):
         if log == None:
             log = init_log()
         self.log = log
@@ -798,6 +808,10 @@ class Qtile(command.CommandObject):
         self.scan()
         self.update_net_desktops()
         hook.subscribe.setgroup(self.update_net_desktops)
+
+        if state:
+            st = pickle.load(StringIO(state))
+            st.apply(self)
 
     def _process_fake_screens(self):
         """
@@ -1588,6 +1602,12 @@ class Qtile(command.CommandObject):
         argv = [sys.executable] + sys.argv
         if '--no-spawn' not in argv:
             argv.append('--no-spawn')
+
+        buf = StringIO()
+        pickle.dump(QtileState(self), buf)
+        argv = filter(lambda s: s.startswith('--with-state'), argv)
+        argv.append('--with-state=' + buf.getvalue())
+
         self.cmd_execute(sys.executable, argv)
 
     def cmd_spawn(self, cmd):
