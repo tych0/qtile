@@ -23,50 +23,36 @@ from collections import defaultdict
 import command
 import hook
 
-class GroupState(object):
-    def __init__(self, group):
-        self.name = group.name
-        self.layout = group.currentLayout
-        self.windows = [w.wid for w in group.windows]
-
 class QtileState(object):
+    """
+        Represents the state of the qtile object.
+    """
     def __init__(self, qtile):
-        self.groups = [GroupState(g) for g in qtile.groups]
+        # Note: window state is saved and restored via _NET_WM_STATE, so
+        # the only thing we need to restore here is the layout and screen
+        # configurations.
+        self.groups = {}
+        self.screens = {}
+
+        for g in qtile.groups:
+            self.groups[g.name] = g.layout.name
+        for index, screen in enumerate(qtile.screens):
+            self.screens[index] = screen.group.name
 
     def apply(self, qtile):
         """
             Rearrange the windows in the specified Qtile object according to
             this QtileState.
         """
-        def windows():
-            for g in self.groups:
-                for w in g.windows:
-                    yield g, w
-
-        # First, dgroups (or some other user process) could have created some
-        # groups. We fire the client_new hook on every window to alert any
-        # hooks that the windows exist (and create any groups or other state
-        # for them).
-        for _, w in windows():
+        for (group, layout) in self.groups.iteritems():
             try:
-                hook.fire("client_new", qtile.windowMap[w])
+                qtile.groupMap[group].layout = layout
             except KeyError:
-                pass
+                pass # group missing
 
-        # Now, the automatic catigorization may have put windows in their
-        # default place, but users may have moved them. Additionally, windows
-        # in static groups haven't been assigned a home yet. So, we move them
-        # to wherever they were.
-        for g, w in windows():
+        for (screen, group) in self.screens.iteritems():
             try:
-                qtile.windowMap[w].togroup(g.name)
-            except (KeyError, command.CommandError):
-                pass # CommandError => group doesn't exist, not possible (?)
-
-        for g in self.groups:
-            try:
-                qtile.groupMap[g.name].layout = g.layout
+                g = qtile.groupMap[group]
+                qtile.screens[screen].setGroup(g)
             except KeyError:
-                pass
-
-        # TODO: restore which group each screen has, which => layoutAll()
+                pass # group or screen missing

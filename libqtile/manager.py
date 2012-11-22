@@ -1605,7 +1605,7 @@ class Qtile(command.CommandObject):
 
         buf = StringIO()
         pickle.dump(QtileState(self), buf)
-        argv = filter(lambda s: s.startswith('--with-state'), argv)
+        argv = filter(lambda s: not s.startswith('--with-state'), argv)
         argv.append('--with-state=' + buf.getvalue())
 
         self.cmd_execute(sys.executable, argv)
