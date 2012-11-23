@@ -15,6 +15,7 @@ class Icon(window._Window):
         window._Window.__init__(self, win, qtile)
         self.systray = systray
         self.width = self.height = systray.icon_size
+        self.window.set_attribute(backpixmap=self.systray.drawer.pixmap)
 
     def handle_ConfigureNotify(self, event):
         icon_size = self.systray.icon_size
@@ -30,7 +31,6 @@ class Icon(window._Window):
             height = icon_size
             width = new_width
         self.width, self.height = width, height
-        self.window.set_attribute(backpixmap=self.systray.drawer.pixmap)
         self.systray.draw()
         return False
 
