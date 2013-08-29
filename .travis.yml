@@ -1,0 +1,16 @@
+language: python
+
+# We can only test with system python, since pycairo will only be built for the
+# system python version.
+python:
+    - "2.7"
+virtualenv:
+    system_site_packages: true
+
+install:
+    - sudo apt-add-repository -y ppa:tycho-s/ppa
+    - sudo apt-get update
+    - sudo apt-get install libxcb1 xinit python-gtk2 libcairo2 python-xlib xserver-xephyr x11-utils
+    - sudo apt-get build-dep qtile
+    - sudo python setup.py install
+script: cd test && nosetests
