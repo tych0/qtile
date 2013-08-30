@@ -7,10 +7,13 @@ python:
 virtualenv:
     system_site_packages: true
 
+before_install:
+    - export DISPLAY=:99.0
+    - sh -e /etc/init.d/xvfb start
 install:
     - sudo apt-add-repository -y ppa:tycho-s/ppa
     - sudo apt-get update
     - sudo apt-get install libxcb1 xinit python-gtk2 libcairo2 python-xlib xserver-xephyr x11-utils
     - sudo apt-get build-dep qtile
     - sudo python setup.py install
-script: cd test && nosetests
+script: cd test && DISPLAY=:99.0 nosetests
