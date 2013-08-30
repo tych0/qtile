@@ -112,15 +112,17 @@ class Xephyr(object):
 
     def _waitForXephyr(self):
         # Try until Xephyr is up
+        last_e = None
         for i in range(50):
             try:
                 d = Xlib.display.Display(self.display)
                 break
             except (Xlib.error.DisplayConnectionError,
-                    Xlib.error.ConnectionClosedError):
+                    Xlib.error.ConnectionClosedError) as e:
                 time.sleep(0.1)
+                last_e = e
         else:
-            raise AssertionError("Could not connect to display.")
+            raise AssertionError("Could not connect to display." + str(last_e))
         d.close()
         del d
 
