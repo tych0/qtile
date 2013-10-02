@@ -55,8 +55,7 @@ class Qtile(command.CommandObject):
     _abort = False
 
     def __init__(self, config,
-                 displayName=None, fname=None, no_spawn=False, log=None,
-                 state=None):
+                 fname=None, no_spawn=False, log=None, state=None):
         gobject.threads_init()
         self.log = log or init_log()
         if hasattr(config, "log_level"):
@@ -64,20 +63,10 @@ class Qtile(command.CommandObject):
 
         self.no_spawn = no_spawn
 
-        if not displayName:
-            displayName = os.environ.get("DISPLAY")
-            if not displayName:
-                raise QtileError("No DISPLAY set.")
-
         if not fname:
-            # Dots might appear in the host part of the display name
-            # during remote X sessions. Let's strip the host part first.
-            displayNum = displayName.partition(":")[2]
-            if not "." in displayNum:
-                displayName = displayName + ".0"
-            fname = command.find_sockfile(displayName)
+            fname = command.find_sockfile(self.displayName)
 
-        self.conn = xcbq.Connection(displayName)
+        self._connect()
         self.config = config
         self.fname = fname
         hook.init(self)
@@ -203,6 +192,22 @@ class Qtile(command.CommandObject):
             if not self.currentScreen:
                 self.currentScreen = s
             self.screens.append(s)
+
+    @property
+    def displayName(self):
+        if not self._displayName:
+            self._displayName = os.environ.get("DISPLAY")
+            if not self._displayName:
+                raise QtileError("No DISPLAY set.")
+        # Dots might appear in the host part of the display name
+        # during remote X sessions. Let's strip the host part first.
+        displayNum = self.displayName.partition(":")[2]
+        if not "." in displayNum:
+            self._displayName = self._displayName + ".0"
+        return self._displayName
+
+    def _connect(self):
+        self.conn = xcbq.Connection(self.displayName)
 
     def _process_screens(self):
         if hasattr(self.config, 'fake_screens'):
@@ -566,8 +571,21 @@ class Qtile(command.CommandObject):
                         if not r:
                             break
             except Exception as e:
-                s = 'Got an exception in poll loop:\n' + traceback.format_exc()
-                self.log.exception(s)
+                if self.conn.conn.has_error():
+                    # For whatever reason, sometimes when we
+                    # come back from suspend our connection to
+                    # X is all fucked up. So, we'll try to
+                    # reconnect once just for grins. This will
+                    # fail with an exception if we can't
+                    # connect, but I'm not really sure how to
+                    # recover at this point if $DISPLAY is
+                    # dead.
+                    self.log.exception('Got an exception in poll loop, '
+                                       'trying to reconnect...')
+                    self._connect()
+                else:
+                    s = 'Got an exception in poll loop:\n' + traceback.format_exc()
+                    self.log.exception(s)
         return True
 
     def loop(self):
