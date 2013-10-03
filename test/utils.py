@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+import threading
 import traceback
 import Xlib.X
 import Xlib.display
@@ -139,29 +140,23 @@ class Xephyr(object):
 
     def startQtile(self, config):
         self._waitForXephyr()
-        pid = os.fork()
-        if pid == 0:
+        self.qtile = libqtile.manager.Qtile(
+                         config, self.display, self.fname,
+                         log=libqtile.manager.init_log(logging.CRITICAL))
+        def qtile_main():
             try:
-                q = libqtile.manager.Qtile(
-                    config, self.display, self.fname,
-                    log=libqtile.manager.init_log(logging.CRITICAL))
-                q.loop()
+                self.qtile.loop()
             except Exception:
                 traceback.print_exc(file=sys.stderr)
-            sys.exit(0)
-        else:
-            self.qtilepid = pid
-            self.c = libqtile.command.Client(self.fname)
-            self._waitForQtile()
+        self.qtile_thread = threading.Thread(target=qtile_main).start()
+        self.c = libqtile.command.Client(self.fname)
+        self._waitForQtile()
 
     def stopQtile(self):
         assert self.c.status()
-        if self.qtilepid:
-            try:
-                self._kill(self.qtilepid)
-            except OSError:
-                # The process may have died due to some other error
-                pass
+        if self.qtile_thread.is_alive():
+            self.qtile.cmd_shutdown()
+            self.qtile_thread.join()
         for pid in self.testwindows[:]:
             self._kill(pid)
 
@@ -169,10 +164,11 @@ class Xephyr(object):
         if path is None:
             raise AssertionError("Trying to run None! (missing executable)")
         start = len(self.c.windows())
-        pid = os.fork()
-        if pid == 0:
-            os.putenv("DISPLAY", self.display)
-            os.execv(path, args)
+
+        env = os.environ.copy()
+        env["DISPLAY"] = self.display
+        subprocess.call(args, env=env)
+
         for i in range(20):
             if len(self.c.windows()) > start:
                 break
