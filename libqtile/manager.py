@@ -542,7 +542,7 @@ class Qtile(command.CommandObject):
             self.log.info("Unknown event: %r" % ename)
         return chain
 
-    def _xpoll(self, conn=None, cond=None):
+    def _xpoll(self):
         while True:
             try:
                 e = self.conn.conn.poll_for_event()
