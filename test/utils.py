@@ -156,6 +156,12 @@ class Xephyr(object):
         assert self.c.status()
         if self.qtile_thread.is_alive():
             self.qtile.cmd_shutdown()
+
+            # If we are stuck in the poll loop with no events, close the
+            # connection from the outside world so that we trigger an update
+            # and qtile actually exits.
+            self.qtile.conn.conn.disconnect()
+
             self.qtile_thread.join()
         for pid in self.testwindows[:]:
             self._kill(pid)
