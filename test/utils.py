@@ -162,7 +162,7 @@ class Xephyr(object):
             # and qtile actually exits.
             self.qtile.conn.conn.disconnect()
 
-            self.qtile_thread.join()
+            # self.qtile_thread.join()
         for pid in self.testwindows[:]:
             self._kill(pid)
 
