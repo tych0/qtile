@@ -13,4 +13,4 @@ install:
     - sudo apt-get install libxcb1 xinit python-gtk2 libcairo2 python-xlib xserver-xephyr x11-utils
     - sudo apt-get build-dep qtile
     - sudo python setup.py install
-script: cd test && xvfb-run nosetests
+script: cd test && xvfb-run nosetests --process-timeout=60
