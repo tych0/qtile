@@ -173,6 +173,7 @@ class Xephyr(object):
 
         env = os.environ.copy()
         env["DISPLAY"] = self.display
+        raise AssertionError("don't hang")
         subprocess.call(args, env=env)
 
         for i in range(20):
