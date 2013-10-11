@@ -148,7 +148,8 @@ class Xephyr(object):
                 self.qtile.loop()
             except Exception:
                 traceback.print_exc(file=sys.stderr)
-        self.qtile_thread = threading.Thread(target=qtile_main).start()
+        self.qtile_thread = threading.Thread(target=qtile_main)
+        self.qtile_thread.start()
         self.c = libqtile.command.Client(self.fname)
         self._waitForQtile()
 
