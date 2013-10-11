@@ -173,8 +173,7 @@ class Xephyr(object):
 
         env = os.environ.copy()
         env["DISPLAY"] = self.display
-        subprocess.call(args, env=env)
-        raise AssertionError("don't hang")
+        subprocess.Popen(args, env=env)
 
         for i in range(20):
             if len(self.c.windows()) > start:
