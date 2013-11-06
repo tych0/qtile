@@ -201,7 +201,7 @@ class Qtile(command.CommandObject):
                 raise QtileError("No DISPLAY set.")
         # Dots might appear in the host part of the display name
         # during remote X sessions. Let's strip the host part first.
-        displayNum = self.displayName.partition(":")[2]
+        displayNum = self._displayName.partition(":")[2]
         if not "." in displayNum:
             self._displayName = self._displayName + ".0"
         return self._displayName
