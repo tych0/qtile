@@ -247,9 +247,11 @@ class _TextBox(_Widget):
 
 class InLoopPollText(_TextBox):
     """ A common interface for polling some 'fast' information, munging it, and
-    rendering the result in a text box. ('fast' here means that this runs /in/
-    the event loop, so don't block. If you want to run something slow, use
-    ThreadedPollWidget. """
+    rendering the result in a text box. You probably want to use
+    ThreadedPollText instead.
+
+    ('fast' here means that this runs /in/ the event loop, so don't block! If
+    you want to run something slow, use ThreadedPollWidget.) """
 
     defaults = [
         ("update_interval", 600, "Update interval in seconds, if none, the "
