@@ -12,9 +12,7 @@ class Clock(base.InLoopPollText):
     defaults = [
         ('format', '%H:%M', 'A Python datetime format string'),
 
-        # Here we override the default of 600 seconds, because we want the
-        # clock to update whenever reasonable, not every 10 minutes :-)
-        ('update_interval', None, 'Update interval for the clock'),
+        ('update_interval', 1., 'Update interval for the clock'),
     ]
     def __init__(self, fmt=None, **config):
         base.InLoopPollText.__init__(self, **config)
@@ -26,7 +24,8 @@ class Clock(base.InLoopPollText):
 
     def tick(self):
         ts = time()
-        self.timeout_add(1. - ts % 1., self.tick)
+        self.timeout_add(self.update_interval - ts % self.update_interval,
+                         self.tick)
         self.update(self.poll())
         return False
 
