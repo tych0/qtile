@@ -275,7 +275,7 @@ class InLoopPollText(_TextBox):
         self.tick()
 
     def button_press(self, x, y, button):
-        self.update(self.poll())
+        self.tick()
 
     def poll(self):
         return 'N/A'
