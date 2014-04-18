@@ -280,8 +280,14 @@ class InLoopPollText(_TextBox):
     def poll(self):
         return 'N/A'
 
+    def _poll(self):
+        try:
+            return self.poll()
+        except:
+            self.log.exception('got exception while polling')
+
     def tick(self):
-        text = self.poll()
+        text = self._poll()
         self.update(text)
         return True
 
@@ -303,11 +309,10 @@ class ThreadedPollText(InLoopPollText):
     rendering the result in a text box. """
     def __init__(self, **config):
         InLoopPollText.__init__(self, **config)
-        self.add_defaults(ThreadedPollText.defaults)
 
     def tick(self):
         def worker():
-            text = self.poll()
+            text = self._poll()
             gobject.idle_add(self.update, text)
         threading.Thread(target=worker).start()
         return True
