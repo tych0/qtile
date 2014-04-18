@@ -251,7 +251,7 @@ class InLoopPollText(_TextBox):
     ThreadedPollText instead.
 
     ('fast' here means that this runs /in/ the event loop, so don't block! If
-    you want to run something slow, use ThreadedPollWidget.) """
+    you want to run something nontrivial, use ThreadedPollWidget.) """
 
     defaults = [
         ("update_interval", 600, "Update interval in seconds, if none, the "
