@@ -7,7 +7,7 @@ import os.path
 import mailbox
 
 
-class Maildir(base.InLoopPollText):
+class Maildir(base.ThreadedPollText):
     """
     A simple widget showing the number of new mails in maildir mailboxes.
     """
@@ -22,7 +22,7 @@ class Maildir(base.InLoopPollText):
         @param separator: the string to put between the subfolder strings.
         @param timeout: the refresh timeout in seconds.
         """
-        base.InLoopPollText.__init__(self, **config)
+        base.ThreadedPollText.__init__(self, **config)
         self._maildirPath = os.path.expanduser(maildirPath)
         self._separator = separator
         self._subFolders = []

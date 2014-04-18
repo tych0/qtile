@@ -4,7 +4,7 @@ import base
 from subprocess import check_output, call
 
 
-class Canto(base.InLoopPollText):
+class Canto(base.ThreadedPollText):
     defaults = [
         ("fetch", False, "Whether to fetch new items on update"),
         ("feeds", [], "List of feeds to display, empty for all"),
@@ -13,7 +13,7 @@ class Canto(base.InLoopPollText):
     ]
 
     def __init__(self, **config):
-        base.InLoopPollText.__init__(self, **config)
+        base.ThreadedPollText.__init__(self, **config)
         self.add_defaults(Canto.defaults)
 
     def poll(self):

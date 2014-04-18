@@ -20,7 +20,7 @@ import base
 import subprocess
 
 
-class Pacman(base.InLoopPollText):
+class Pacman(base.ThreadedPollText):
     """
     Shows number of available updates.
     """
@@ -31,7 +31,7 @@ class Pacman(base.InLoopPollText):
     ]
 
     def __init__(self, **config):
-        base.InLoopPollText.__init__(self, **config)
+        base.ThreadedPollText.__init__(self, **config)
         self.add_defaults(Pacman.defaults)
 
     def draw(self):
@@ -39,13 +39,13 @@ class Pacman(base.InLoopPollText):
             self.layout.colour = self.unavailable
         else:
             self.layout.colour = self.foreground
-        base.InLoopPollText.draw(self)
+        base.ThreadedPollText.draw(self)
 
     def poll(self):
         pacman = subprocess.Popen(['checkupdates'], stdout=subprocess.PIPE)
         return str(len(pacman.stdout.readlines()))
 
     def button_press(self, x, y, button):
-        base.InLoopPollText.button_press(self, x, y, button)
+        base.ThreadedPollText.button_press(self, x, y, button)
         if button == 1 and self.execute is not None:
             subprocess.Popen([self.execute], shell=True)

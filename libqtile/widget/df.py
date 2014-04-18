@@ -18,7 +18,7 @@
 import os
 import base
 
-class DF(base.InLoopPollText):
+class DF(base.ThreadedPollText):
     """
     Disk Free Widget
 
@@ -40,7 +40,7 @@ class DF(base.InLoopPollText):
                 "M": 1024*1024,
                 "B": 1024}
     def __init__(self, **config):
-        base.InLoopPollText.__init__(self, **config)
+        base.ThreadedPollText.__init__(self, **config)
         self.add_defaults(DF.defaults)
         self.user_free = 0
         self.calc = self.measures[self.measure]
@@ -51,7 +51,7 @@ class DF(base.InLoopPollText):
         else:
             self.layout.colour = self.foreground
 
-        base.InLoopPollText.draw(self)
+        base.ThreadedPollText.draw(self)
 
     def poll(self):
         statvfs = os.statvfs(self.partition)

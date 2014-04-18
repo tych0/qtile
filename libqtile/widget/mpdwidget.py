@@ -15,7 +15,7 @@ import base
 import re
 
 
-class Mpd(base.InLoopPollText):
+class Mpd(base.ThreadedPollText):
     """
         An mpd widget
     """
@@ -50,7 +50,7 @@ class Mpd(base.InLoopPollText):
         self.msg_nc = msg_nc
         self.do_color_progress = do_color_progress
         self.inc = 2
-        base.InLoopPollText.__init__(self, **config)
+        base.ThreadedPollText.__init__(self, **config)
         self.add_defaults(Mpd.defaults)
         self.client = MPDClient()
         self.connected = False
@@ -112,7 +112,7 @@ class Mpd(base.InLoopPollText):
         return True
 
     def _configure(self, qtile, bar):
-        base.InLoopPollText._configure(self, qtile, bar)
+        base.ThreadedPollText._configure(self, qtile, bar)
         self.layout = self.drawer.textlayout(
             self.text,
             self.foreground,

@@ -67,7 +67,7 @@ import oauth2client.file
 
 from libqtile import utils
 
-class GoogleCalendar(base.InLoopPollText):
+class GoogleCalendar(base.ThreadedPollText):
     ''' This widget will display the next appointment on your Google calendar
         in the qtile status bar. Appointments within the "reminder" time will
         be highlighted. Authentication credentials are stored in a file on
@@ -101,14 +101,14 @@ class GoogleCalendar(base.InLoopPollText):
     ]
 
     def __init__(self, **config):
-        base.InLoopPollText.__init__(self, **config)
+        base.ThreadedPollText.__init__(self, **config)
         self.text = 'Calendar not initialized.'
         self.cred_init()
         # confirm credentials every hour
         self.timeout_add(3600, self.cred_init)
 
     def _configure(self, qtile, bar):
-        base.InLoopPollText._configure(self, qtile, bar)
+        base.ThreadedPollText._configure(self, qtile, bar)
         self.add_defaults(GoogleCalendar.defaults)
         self.layout = self.drawer.textlayout(
             self.text,
@@ -162,7 +162,7 @@ class GoogleCalendar(base.InLoopPollText):
         return True
 
     def button_press(self, x, y, button):
-        base.InLoopPollText.button_press(self, x, y, button)
+        base.ThreadedPollText.button_press(self, x, y, button)
         if hasattr(self, 'credentials'):
             self.qtile.addGroup(self.www_group)
             self.qtile.groupMap[self.www_group].cmd_toscreen(self.www_screen)

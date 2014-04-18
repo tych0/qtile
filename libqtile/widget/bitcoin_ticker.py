@@ -11,7 +11,7 @@ except ImportError:
     import simplejson as json
 
 
-class BitcoinTicker(base.InLoopPollText):
+class BitcoinTicker(base.ThreadedPollText):
     ''' A bitcoin ticker widget, data provided by the btc-e.com API. Defaults to
         displaying currency in whatever the current locale is.
     '''
@@ -27,7 +27,7 @@ class BitcoinTicker(base.InLoopPollText):
     ]
 
     def __init__(self, **config):
-        base.InLoopPollText.__init__(self, **config)
+        base.ThreadedPollText.__init__(self, **config)
         self.add_defaults(BitcoinTicker.defaults)
 
     def poll(self):
