@@ -13,7 +13,7 @@ class Canto(base.InLoopPollText):
     ]
 
     def __init__(self, **config):
-        base._TextBox.__init__(self, **config)
+        base.InLoopPollText.__init__(self, **config)
         self.add_defaults(Canto.defaults)
 
     def poll(self):

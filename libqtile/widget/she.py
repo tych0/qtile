@@ -14,7 +14,7 @@ class She(base.InLoopPollText):
     ]
 
     def __init__(self, **config):
-        base._TextBox.__init__(self, 'CPU', **config)
+        base.InLoopPollText.__init__(self, 'CPU', **config)
         self.add_defaults(She.defaults)
         self.modes = {
             '0x300': {'name': 'Performance', 'speed': '1.6GHz'},
