@@ -128,6 +128,11 @@ class Qtile(command.CommandObject):
         if config.main:
             config.main(self)
 
+        if hasattr(config, "widget_defaults") and config.widget_defaults:
+            _Widget.global_defaults = config.widget_defaults
+        else:
+            _Widget.global_defaults = {}
+
         self.dgroups = None
         if self.config.groups:
             key_binder = None
@@ -135,10 +140,6 @@ class Qtile(command.CommandObject):
                 key_binder = self.config.dgroups_key_binder
             self.dgroups = DGroups(self, self.config.groups, key_binder)
 
-        if hasattr(config, "widget_defaults") and config.widget_defaults:
-            _Widget.global_defaults = config.widget_defaults
-        else:
-            _Widget.global_defaults = {}
 
         for i in self.groups:
             self.groupMap[i.name] = i
