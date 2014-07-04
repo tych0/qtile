@@ -1143,6 +1143,22 @@ class Window(_Window):
             if not self.qtile.config.follow_mouse_focus and \
                     self.group.currentWindow != self:
                 self.group.focus(self, False)
+        elif name == "_NET_ACTIVE_WINDOW":
+            # we should only get these on the root window
+            assert self.qtile.root == self.win
+            active = self.qtile.root.get_property('_NET_ACTIVE_WINDOW',
+                                                  xcb.xproto.GetPropertyType.Any,
+                                                  unpack='I')
+            try:
+                win = self.qtile.windowMap[active]
+
+                # hopefully bars are only showing stuff in the current group.
+                # we could do more here, i.e. look up the group a window is in
+                # and then focus that group before focusing the window if
+                # people really want, though.
+                self.qtile.currentGroup.focus(win)
+            except KeyError:
+                self.qtile.log.error('Invalid active window %s' % str(active))
         else:
             self.qtile.log.info("Unknown window property: %s" % name)
         return False
