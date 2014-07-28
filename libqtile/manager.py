@@ -763,6 +763,11 @@ class Qtile(command.CommandObject):
     def handle_EnterNotify(self, e):
         if e.event in self.windowMap:
             return True
+
+        # Don't follow mouse focus to empty screens.
+        if not self.follow_mouse_focus:
+            return True
+
         s = self.find_screen(e.root_x, e.root_y)
         if s:
             self.toScreen(s.index)
