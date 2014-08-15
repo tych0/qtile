@@ -950,10 +950,6 @@ class Qtile(command.CommandObject):
     def handle_DestroyNotify(self, e):
         self.unmanage(e.window)
 
-    def handle_UnmapNotify(self, e):
-        if e.event != self.root.wid:
-            self.unmanage(e.window)
-
     def handle_ScreenChangeNotify(self, e):
         hook.fire("screen_change", self, e)
 
