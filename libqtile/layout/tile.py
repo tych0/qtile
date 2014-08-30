@@ -142,7 +142,6 @@ class Tile(Layout):
         w = 0
         h = 0
         borderWidth = self.border_width
-        margin = self.margin
         if self.clients and client in self.clients:
             pos = self.clients.index(client)
             if client in self.master_windows:
@@ -162,12 +161,13 @@ class Tile(Layout):
             else:
                 bc = self.group.qtile.colorPixel(self.border_normal)
             client.place(
-                x + margin,
-                y + margin,
-                w - margin * 2 - borderWidth * 2,
-                h - margin * 2 - borderWidth * 2,
+                x,
+                y,
+                w - borderWidth * 2,
+                h - borderWidth * 2,
                 borderWidth,
                 bc,
+                margin=self.margin,
             )
             client.unhide()
         else:

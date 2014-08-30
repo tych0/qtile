@@ -26,9 +26,8 @@ from . import hook
 from . import configurable
 from . import window
 
-from six.moves import gobject
-
 USE_BAR_DRAW_QUEUE = True
+
 
 class Gap(command.CommandObject):
     """
@@ -42,6 +41,7 @@ class Gap(command.CommandObject):
             size: The width of the gap.
         """
         self.size = size
+        self.initial_size = size
         self.qtile = None
         self.screen = None
 
@@ -257,7 +257,7 @@ class Bar(Gap, configurable.Configurable):
     def draw(self):
         if USE_BAR_DRAW_QUEUE:
             if self.queued_draws == 0:
-                gobject.idle_add(self._actual_draw)
+                self.qtile._eventloop.call_soon(self._actual_draw)
             self.queued_draws += 1
         else:
             self._actual_draw()
@@ -272,9 +272,6 @@ class Bar(Gap, configurable.Configurable):
             if end < self.width:
                 self.drawer.draw(end, self.width - end)
 
-        # have to return False here to avoid getting called again
-        return False
-
     def info(self):
         return dict(
             width=self.width,
@@ -282,6 +279,18 @@ class Bar(Gap, configurable.Configurable):
             widgets=[i.info() for i in self.widgets],
             window=self.window.window.wid
         )
+
+    def is_show(self):
+        return self.size != 0
+
+    def show(self, is_show=True):
+        if is_show != self.is_show():
+            if is_show:
+                self.size = self.initial_size
+                self.window.unhide()
+            else:
+                self.size = 0
+                self.window.hide()
 
     def cmd_fake_button_press(self, screen, position, x, y, button=1):
         """

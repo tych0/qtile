@@ -27,18 +27,21 @@ import logging
 import os
 import os.path
 import pickle
+import shlex
+import signal
 import sys
 import xcffib
 import xcffib.xinerama
 import xcffib.xproto
 import six
-from six.moves import gobject
+
+from six.moves import asyncio
 
 from .config import Drag, Click, Screen, Match, Rule
 from .group import _Group
 from .state import QtileState
 from .utils import QtileError
-from .widget.base import _Widget
+from .widget.base import _Widget, deprecated
 from . import command
 from . import hook
 from . import utils
@@ -50,20 +53,22 @@ class Qtile(command.CommandObject):
     """
         This object is the __root__ of the command graph.
     """
-    _exit = False
+    _exit = asyncio.Future()
 
     def __init__(self, config,
                  displayName=None, fname=None, no_spawn=False, log=None,
                  state=None):
-        gobject.threads_init()
         logkwargs = {}
         if hasattr(config, "log_level"):
             logkwargs["log_level"] = config.log_level
         if hasattr(config, "log_path"):
             logkwargs["log_path"] = config.log_path
         self.log = log or init_log(**logkwargs)
+        logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 
         self.no_spawn = no_spawn
+
+        self._eventloop = asyncio.get_event_loop()
 
         if not displayName:
             displayName = os.environ.get("DISPLAY")
@@ -435,6 +440,8 @@ class Qtile(command.CommandObject):
             hook.fire("client_killed", c)
             self.reset_gaps(c)
             if getattr(c, "group", None):
+                c.window.unmap()
+                c.state = window.WithdrawnState
                 c.group.remove(c)
             del self.windowMap[win]
             self.update_client_list()
@@ -595,7 +602,7 @@ class Qtile(command.CommandObject):
             self.log.info("Unknown event: %r" % ename)
         return chain
 
-    def _xpoll(self, conn=None, cond=None):
+    def _xpoll(self):
         while True:
             try:
                 e = self.conn.conn.poll_for_event()
@@ -620,44 +627,50 @@ class Qtile(command.CommandObject):
                     self.log.exception("Shutting down due to X connection error %s (%s)" %
                         (error_string, error_code))
                     self.conn.disconnect()
-                    self._exit = True
-                    return False
+                    self._exit.set_result(None)
 
                 self.log.exception("Got an exception in poll loop")
-        return True
+        self._loop()
+
+    def _shutdown(self):
+        self.log.info('Got shutdown, breaking main loop cleanly')
+        self._eventloop.stop()
+
+    def _loop(self):
+        # Whenever changes happen, this should be called
+        try:
+            self.conn.flush()
+
+        # Catch some bad X exceptions. Since X is event based, race
+        # conditions can occur almost anywhere in the code. For
+        # example, if a window is created and then immediately
+        # destroyed (before the event handler is evoked), when the
+        # event handler tries to examine the window properties, it
+        # will throw a WindowError exception. We can essentially
+        # ignore it, since the window is already dead and we've got
+        # another event in the queue notifying us to clean it up.
+        except (WindowError, AccessError, DrawableError):
+            pass
 
     def loop(self):
-
         self.server.start()
-        self.log.info('Adding io watch')
-        display_tag = gobject.io_add_watch(
-            self.conn.conn.get_file_descriptor(),
-            gobject.IO_IN, self._xpoll
-        )
-        try:
-            context = gobject.main_context_default()
-            while True:
-                if context.iteration(True):
-                    try:
-                        # this seems to be crucial part
-                        self.conn.flush()
+        self._exit.add_done_callback(lambda x: self._shutdown())
 
-                    # Catch some bad X exceptions. Since X is event based, race
-                    # conditions can occur almost anywhere in the code. For
-                    # example, if a window is created and then immediately
-                    # destroyed (before the event handler is evoked), when the
-                    # event handler tries to examine the window properties, it
-                    # will throw a WindowError exception. We can essentially
-                    # ignore it, since the window is already dead and we've got
-                    # another event in the queue notifying us to clean it up.
-                    except (WindowError, AccessError, DrawableError):
-                        pass
-                if self._exit:
-                    self.log.info('Got shutdown, Breaking main loop cleanly')
-                    break
+        self._eventloop.add_signal_handler(signal.SIGINT, self._shutdown)
+        self._eventloop.add_signal_handler(signal.SIGTERM, self._shutdown)
+
+        self.log.info('Adding io watch')
+        fd = self.conn.conn.get_file_descriptor()
+        self._eventloop.add_reader(fd, self._xpoll)
+        self._eventloop.call_soon(self._loop)
+
+        try:
+            self._eventloop.run_forever()
         finally:
-            self.log.info('Removing source')
-            gobject.source_remove(display_tag)
+            self.server.close()
+            self.log.info('Removing io watch')
+            self._eventloop.remove_reader(fd)
+            self._eventloop.close()
 
     def find_screen(self, x, y):
         """
@@ -1072,6 +1085,14 @@ class Qtile(command.CommandObject):
 
     def cmd_nextlayout(self, group=None):
         """
+            This method will be deprecated in favor of cmd_next_layout.
+            Use lazy.next_layout(g) in your config instead.
+        """
+        deprecated(Qtile.cmd_nextlayout.__doc__)
+        self.cmd_next_layout(group)
+
+    def cmd_next_layout(self, group=None):
+        """
             Switch to the next layout.
 
             :group Group name. If not specified, the current group is assumed.
@@ -1083,6 +1104,14 @@ class Qtile(command.CommandObject):
         group.nextLayout()
 
     def cmd_prevlayout(self, group=None):
+        """
+            This method will be deprecated in favor of cmd_prev_layout.
+            Use lazy.prev_layout(g) in your config instead.
+        """
+        deprecated(Qtile.cmd_prevlayout.__doc__)
+        self.cmd_prev_layout(group)
+
+    def cmd_prev_layout(self, group=None):
         """
             Switch to the prev layout.
 
@@ -1175,12 +1204,13 @@ class Qtile(command.CommandObject):
 
                 spawn("firefox")
         """
-        pid, _, _, _ = gobject.spawn_async(
-            [os.environ['SHELL'], '-c', cmd],
-            flags=(gobject.SPAWN_STDOUT_TO_DEV_NULL |
-                   gobject.SPAWN_STDERR_TO_DEV_NULL)
-        )
-        return str(pid)
+        loop = asyncio.new_event_loop()
+
+        args = shlex.split(cmd)
+        proc_co = asyncio.create_subprocess_exec(*args, loop=loop)  # coroutine to spawn process
+        proc = loop.run_until_complete(proc_co)  # returns a Process
+
+        return proc.pid
 
     def cmd_status(self):
         """
@@ -1206,6 +1236,14 @@ class Qtile(command.CommandObject):
 
     def cmd_to_next_screen(self):
         """
+            This method will be deprecated in favor of cmd_next_screen.
+            Use lazy.next_screen in your config instead.
+        """
+        deprecated(Qtile.cmd_to_next_screen.__doc__)
+        return self.cmd_next_screen()
+
+    def cmd_next_screen(self):
+        """
             Move to next screen
         """
         return self.toScreen(
@@ -1213,6 +1251,14 @@ class Qtile(command.CommandObject):
         )
 
     def cmd_to_prev_screen(self):
+        """
+            This method will be deprecated in favor of cmd_prev_screen.
+            Use lazy.prev_screen in your config instead.
+        """
+        deprecated(Qtile.cmd_to_prev_screen.__doc__)
+        return self.cmd_prev_screen()
+
+    def cmd_prev_screen(self):
         """
             Move to the previous screen
         """
@@ -1248,7 +1294,7 @@ class Qtile(command.CommandObject):
         """
             Quit Qtile.
         """
-        self._exit = True
+        self._exit.set_result(None)
 
     def cmd_switch_groups(self, groupa, groupb):
         """
@@ -1417,3 +1463,30 @@ class Qtile(command.CommandObject):
 
     def cmd_remove_rule(self, rule_id):
         self.dgroups.remove_rule(rule_id)
+
+    def cmd_hide_show_bar(self, position="all"):
+        """
+            param: position one of: "top", "bottom", "left", "right" or "all"
+        """
+        if position in ["top", "bottom", "left", "right"]:
+            bar = getattr(self.currentScreen, position)
+            if bar:
+                bar.show(not bar.is_show())
+                self.currentGroup.layoutAll()
+            else:
+                self.log.warning(
+                    "Not found bar in position '%s' for hide/show." % position)
+        elif position == "all":
+            screen = self.currentScreen
+            is_show = None
+            for bar in [screen.left, screen.right, screen.top, screen.bottom]:
+                if bar:
+                    if is_show is None:
+                        is_show = not bar.is_show()
+                    bar.show(is_show)
+            if is_show is not None:
+                self.currentGroup.layoutAll()
+            else:
+                self.log.warning("Not found bar for hide/show.")
+        else:
+            self.log.error("Invalid position value:%s" % position)

@@ -141,8 +141,21 @@ class Battery(_Battery):
     def __init__(self, **config):
         _Battery.__init__(self, **config)
         self.add_defaults(Battery.defaults)
-        self.timeout_add(self.update_delay, self.update)
-        self.update()
+
+    def _configure(self, qtile, bar):
+        setup_timeout = not self.configured
+        _Battery._configure(self, qtile, bar)
+
+        if setup_timeout:
+            def retick():
+                update_delay = self.update()
+                if update_delay is None and self.update_delay is not None:
+                    self.timeout_add(self.update_delay, retick)
+                elif update_delay:
+                    self.timeout_add(update_delay, retick)
+            retick()
+        else:
+            self.update()
 
     def _get_text(self):
         info = self._get_info()
@@ -195,7 +208,6 @@ class Battery(_Battery):
             if ntext != self.text:
                 self.text = ntext
                 self.bar.draw()
-        return True
 
 
 class BatteryIcon(_Battery):
@@ -262,7 +274,6 @@ class BatteryIcon(_Battery):
             if icon != self.current_icon:
                 self.current_icon = icon
                 self.draw()
-        return True
 
     def draw(self):
         if self.theme_path:

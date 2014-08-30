@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 # Import python libs
+import sys
 try:
     from setuptools import setup
 except ImportError:
@@ -24,13 +25,18 @@ Features
       unit-tested window mangers around.
 """
 
-import libqtile.pangocffi
+dependencies = ['six', 'xcffib', 'cffi>=0.8.2']
 
-dependencies = ['six', 'cffi>=0.8.2']
+if sys.version_info >= (3, 4):
+    pass
+elif sys.version_info >= (3, 3):
+    dependencies.append('asyncio')
+else:
+    dependencies.append('trollius')
 
 setup(
     name="qtile",
-    version="0.7.0",
+    version="0.8.0",
     description="A pure-Python tiling window manager.",
     long_description=long_description,
     classifiers=[

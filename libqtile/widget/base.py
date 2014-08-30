@@ -1,9 +1,7 @@
 from .. import command, bar, configurable, drawer
-from six.moves import gobject
 import logging
 import threading
 import warnings
-
 
 LEFT = object()
 CENTER = object()
@@ -125,19 +123,10 @@ class _Widget(command.CommandObject, configurable.Configurable):
 
     def timeout_add(self, seconds, method, method_args=()):
         """
-            This method calls either ``gobject.timeout_add`` or
-            ``gobject.timeout_add_seconds`` with same arguments. Latter is
-            better for battery usage, but works only with integer timeouts.
+            This method calls either ``.call_later`` with given arguments.
         """
         self.log.debug('Adding timer for %r in %.2fs', method, seconds)
-        if int(seconds) == seconds:
-            return gobject.timeout_add_seconds(
-                int(seconds), method, *method_args
-            )
-        else:
-            return gobject.timeout_add(
-                int(seconds * 1000), method, *method_args
-            )
+        return self.qtile._eventloop.call_later(seconds, method, *method_args)
 
 
 UNSPECIFIED = bar.Obj("UNSPECIFIED")
@@ -268,15 +257,24 @@ class InLoopPollText(_TextBox):
 
     def _configure(self, qtile, bar):
         self.qtile = qtile
-        if not self.configured:
-            if self.update_interval is None:
-                gobject.idle_add(self.tick)
-            else:
-                self.timeout_add(self.update_interval, self.tick)
+        setup_timeout = not self.configured
+
         _TextBox._configure(self, qtile, bar)
 
         # Update when we are configured.
-        self.tick()
+        if setup_timeout:
+            def retick():
+                update_interval = self.tick()
+                # If self.update_interval is defined and .tick() returns None, re-call after self.update_interval
+                if update_interval is None and self.update_interval is not None:
+                    self.timeout_add(self.update_interval, retick)
+                # We can change the update interval by returning something from .tick()
+                elif update_interval:
+                    self.timeout_add(update_interval, retick)
+                # If update_interval is False, we won't re-call
+            retick()
+        else:
+            self.tick()
 
     def button_press(self, x, y, button):
         self.tick()
@@ -293,7 +291,6 @@ class InLoopPollText(_TextBox):
     def tick(self):
         text = self._poll()
         self.update(text)
-        return True
 
     def update(self, text):
         old_width = self.layout.width
@@ -317,9 +314,9 @@ class ThreadedPollText(InLoopPollText):
     def tick(self):
         def worker():
             text = self._poll()
-            gobject.idle_add(self.update, text)
+            self.qtile._eventloop.call_soon_threadsafe(self.update, text)
+        # TODO: There are nice asyncio constructs for this sort of thing, I think...
         threading.Thread(target=worker).start()
-        return True
 
 # these two classes below look SUSPICIOUSLY similar
 

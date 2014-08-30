@@ -35,11 +35,9 @@ class Clock(base.InLoopPollText):
             self.format = fmt
 
     def tick(self):
-        ts = time()
-        self.timeout_add(self.update_interval - ts % self.update_interval,
-                         self.tick)
         self.update(self.poll())
-        return False
+        ts = time()
+        return self.update_interval - ts % self.update_interval
 
     def _get_time(self):
         ts = time()

@@ -27,6 +27,9 @@ class Volume(base._TextBox):
         ("update_interval", 0.2, "Update time in seconds."),
         ("emoji", False, "Use emoji to display volume states, only if ``theme_path`` is not set."
                          "The specified font needs to contain the correct unicode characters."),
+        ("mute_command", None, "Mute command"),
+        ("volume_up_command", None, "Volume up command"),
+        ("volume_down_command", None, "Volume down command"),
     ]
 
     def __init__(self, **config):
@@ -37,44 +40,55 @@ class Volume(base._TextBox):
             self.width = 0
         self.surfaces = {}
         self.volume = None
-        self.timeout_add(self.update_interval, self.update)
 
     def _configure(self, qtile, bar):
+        setup_timeout = not self.configured
         base._TextBox._configure(self, qtile, bar)
         if self.theme_path:
             self.setup_images()
+        if setup_timeout:
+            self.timeout_add(self.update_interval, self.update)
 
     def button_press(self, x, y, button):
         if button == 5:
-            subprocess.call([
-                'amixer',
-                '-q',
-                '-c',
-                str(self.cardid),
-                'sset',
-                self.channel,
-                '2dB-'
-            ])
+            if self.volume_down_command is not None:
+                subprocess.call(self.volume_down_command)
+            else:
+                subprocess.call([
+                    'amixer',
+                    '-q',
+                    '-c',
+                    str(self.cardid),
+                    'sset',
+                    self.channel,
+                    '2dB-'
+                ])
         elif button == 4:
-            subprocess.call([
-                'amixer',
-                '-q',
-                '-c',
-                str(self.cardid),
-                'sset',
-                self.channel,
-                '2dB+'
-            ])
+            if self.volume_up_command is not None:
+                subprocess.call(self.volume_up_command)
+            else:
+                subprocess.call([
+                    'amixer',
+                    '-q',
+                    '-c',
+                    str(self.cardid),
+                    'sset',
+                    self.channel,
+                    '2dB+'
+                ])
         elif button == 1:
-            subprocess.call([
-                'amixer',
-                '-q',
-                '-c',
-                str(self.cardid),
-                'sset',
-                self.channel,
-                'toggle'
-            ])
+            if self.mute_command is not None:
+                subprocess.call(self.mute_command)
+            else:
+                subprocess.call([
+                    'amixer',
+                    '-q',
+                    '-c',
+                    str(self.cardid),
+                    'sset',
+                    self.channel,
+                    'toggle'
+                ])
         self.draw()
 
     def update(self):
