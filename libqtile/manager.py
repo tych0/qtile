@@ -70,6 +70,7 @@ class Qtile(command.CommandObject):
         self.no_spawn = no_spawn
 
         self._eventloop = asyncio.get_event_loop()
+        self._eventloop.set_exception_handler(self._log_eventloop_exception)
 
         if not displayName:
             displayName = os.environ.get("DISPLAY")
@@ -206,6 +207,9 @@ class Qtile(command.CommandObject):
             "CLIPBOARD": {"owner": None, "selection": ""}
         }
         self.setup_selection()
+
+    def _log_eventloop_exception(self, loop, context):
+        self.log.exception("got exception in event loop, context: %s" % context)
 
     def setup_selection(self):
         PRIMARY = self.conn.atoms["PRIMARY"]
