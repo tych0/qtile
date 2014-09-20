@@ -35,6 +35,8 @@ from six.moves import asyncio
 
 HDRLEN = 4
 
+log = logging.getLogger('qtile')
+
 
 class IPCError(Exception):
     pass
@@ -83,7 +85,9 @@ class _ClientProtocol(asyncio.Protocol, _IPC):
         self.reply = asyncio.Future()
 
     def send(self, msg):
+        log.error('client transport.write')
         self.transport.write(self._pack(msg))
+        log.error('client transport.write_eof')
         self.transport.write_eof()
 
     def data_received(self, data):
@@ -99,6 +103,7 @@ class _ClientProtocol(asyncio.Protocol, _IPC):
             self.reply.set_result(data)
 
     def connection_lost(self, exc):
+        log.error('client got connection_lost')
         # The client shouldn't just lose the connection without an EOF
         if exc:
             self.reply.set_exception(exc)
