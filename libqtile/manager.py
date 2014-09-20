@@ -65,7 +65,7 @@ class Qtile(command.CommandObject):
         if hasattr(config, "log_path"):
             logkwargs["log_path"] = config.log_path
         self.log = log or init_log(**logkwargs)
-        logging.getLogger('asyncio').setLevel(logging.CRITICAL)
+        logging.getLogger('asyncio').setLevel(logging.WARNING)
 
         self.no_spawn = no_spawn
 
