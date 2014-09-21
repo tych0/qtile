@@ -29,9 +29,16 @@ class Subscribe:
 
     def startup(self, func):
         """
-            Called when Qtile has initialized
+            Called when Qtile has initialized, exactly once (i.e. not on each
+            lazy.restart()).
         """
         return self._subscribe("startup", func)
+
+    def restart(self, func):
+        """
+            Called each time qtile is started (including the first time qtile starts)
+        """
+        return self._subscribe("restart", func)
 
     def setgroup(self, func):
         """
