@@ -104,6 +104,13 @@ class _ClientProtocol(asyncio.Protocol, _IPC):
 
     def connection_lost(self, exc):
         log.error('client got connection_lost')
+
+        # Sometimes the reply is cancelled? Not sure why, but in that case, we
+        # shouldn't do anything here, we can just let the user see the future
+        # was cancelled.
+        if self.reply.cancelled():
+            return
+
         # The client shouldn't just lose the connection without an EOF
         if exc:
             self.reply.set_exception(exc)
