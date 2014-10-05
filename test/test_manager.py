@@ -178,10 +178,7 @@ def test_resize(self):
     self.c.screen[0].resize(x=10, y=10, w=100, h=100)
     for _ in range(10):
         time.sleep(0.1)
-        try:
-            d = self.c.screen[0].info()
-        except RuntimeError:
-            raise nose.SkipTest
+        d = self.c.screen[0].info()
 
         if d["width"] == d["height"] == 100:
             break
@@ -684,10 +681,7 @@ def test_resize_(self):
     )
     for _ in range(10):
         time.sleep(0.1)
-        try:
-            d = self.c.screen.info()
-        except RuntimeError:
-            raise nose.SkipTest
+        d = self.c.screen.info()
 
         if d["width"] == 480 and d["height"] == 640:
             break
