@@ -114,7 +114,7 @@ class Xephyr(object):
 
     def _startXephyr(self):
         args = [
-            "Xephyr", "-name", "qtile_test",
+            "xtrace", "Xephyr", "-name", "qtile_test",
             self.display, "-ac",
             "-screen", "%sx%s" % (self.width, self.height)]
         if self.two_screens:
