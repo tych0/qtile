@@ -95,6 +95,10 @@ class Mpris(base._TextBox):
 
     @ensure_connected
     def update(self):
+        self.qtile.call_soon_threadsafe(self.real_update)
+
+    @ensure_connected
+    def real_update(self):
         if not self.configured:
             return True
         if not self.connected:

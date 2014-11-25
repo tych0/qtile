@@ -31,7 +31,9 @@ import pickle
 import shlex
 import signal
 import sys
+import time
 import traceback
+import threading
 import xcffib
 import xcffib.xinerama
 import xcffib.xproto
@@ -168,6 +170,8 @@ class Qtile(command.CommandObject):
             xcffib.xproto.NoExposureEvent
         ])
 
+        self.setup_python_dbus()
+
         self.conn.flush()
         self.conn.xsync()
         self._xpoll()
@@ -230,6 +234,42 @@ class Qtile(command.CommandObject):
         # ask for selection on starup
         self.convert_selection(PRIMARY)
         self.convert_selection(CLIPBOARD)
+
+    def setup_python_dbus(self):
+        # This is a little strange. python-dbus internally depends on gobject,
+        # so gobject's threads need to be running, and a gobject "main loop
+        # thread" needs to be spawned, but we try to let it only interact with
+        # us via calls to asyncio's call_soon_threadsafe.
+        try:
+            # We import dbus here to thrown an ImportError if it isn't
+            # available. Since the only reason we're running this thread is
+            # because of dbus, if dbus isn't around there's no need to run
+            # this thread.
+            import dbus  # noqa
+            import gobject
+
+            gobject.threads_init()
+            def gobject_thread():
+                ctx = gobject.main_context_default()
+                while not self._eventloop.is_closed():
+                    try:
+                        # This is a slight hack. We don't want gobject to
+                        # block the entire interpreter, so we don't tell it
+                        # that it can block. iteration() returns true if
+                        # events were actually dispatched, so we don't sleep
+                        # if we actually received an event. Otherwise, we just
+                        # sleep to avoid spin locking this thread. Since this
+                        # thread is no longer being used for real time stuff
+                        # (libnotify events and mpris at the time of this
+                        # writing), this Should Be fine.
+                        if not ctx.iteration(False):
+                            time.sleep(0.2)
+                    except Exception:
+                        self.qtile.exception("got exception from gobject")
+            t = threading.Thread(target=gobject_thread, name="gobject_thread")
+            t.start()
+        except ImportError:
+            pass
 
     def _process_fake_screens(self):
         """
