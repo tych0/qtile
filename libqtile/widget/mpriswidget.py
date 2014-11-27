@@ -35,6 +35,7 @@ class Mpris(base._TextBox):
         self.objname = objname
         self.connected = False
         self.name = name
+        self.text = "initialized"
 
         # try to connect for grins
         self._connect()
@@ -59,6 +60,7 @@ class Mpris(base._TextBox):
             )
             self.connected = True
         except dbus.exceptions.DBusException:
+            self.qtile.exception("exception initalizing mpris")
             self.connected = False
 
     def handle_track_change(self, metadata):
@@ -100,9 +102,9 @@ class Mpris(base._TextBox):
     @ensure_connected
     def real_update(self):
         if not self.configured:
-            return True
+            playing = 'Not configured'
         if not self.connected:
-            playing = ''
+            playing = 'Not Connected'
         elif not self.is_playing():
             playing = 'Stopped'
         else:
