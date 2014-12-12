@@ -1613,3 +1613,10 @@ class Qtile(command.CommandObject):
                 self.log.warning("Not found bar for hide/show.")
         else:
             self.log.error("Invalid position value:%s" % position)
+
+    def cmd_fake_keypress(self, key):
+        d = object()
+        keysym = xcbq.keysyms[key]
+        d.detail = self.keysym_to_keycode(keysym)
+        d.state = 0
+        self.handle_KeyPress(d)
