@@ -1089,27 +1089,28 @@ class Qtile(command.CommandObject):
                 return i
         return None
 
+    def _asyncio_wrapper(self, func, *args):
+        def f():
+            try:
+                func(*args)
+            except:
+                self.qtile.exception("got an exception from scheduled function")
+            finally:
+                self.conn.flush()
+        return f
+
     def call_soon(self, func, *args):
         """ A wrapper for the event loop's call_soon which also flushes the X
         event queue to the server after func is called. """
-        def f():
-            func(*args)
-            self.conn.flush()
-        self._eventloop.call_soon(f)
+        self._eventloop.call_soon(self._asyncio_wrapper(func, *args))
 
     def call_soon_threadsafe(self, func, *args):
         """ Another event loop proxy, see `call_soon`. """
-        def f():
-            func(*args)
-            self.conn.flush()
-        self._eventloop.call_soon_threadsafe(f)
+        self._eventloop.call_soon_threadsafe(self._asyncio_wrapper(func, *args))
 
     def call_later(self, delay, func, *args):
         """ Another event loop proxy, see `call_soon`. """
-        def f():
-            func(*args)
-            self.conn.flush()
-        self._eventloop.call_later(delay, f)
+        self._eventloop.call_later(delay, self._asyncio_wrapper(func, *args))
 
     def run_in_executor(self, func, *args):
         """ A wrapper for running a function in the event loop's default
