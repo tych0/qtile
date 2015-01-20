@@ -16,6 +16,7 @@ lint:
 
 .PHONY: ckpatch
 ckpatch: lint check
+	cd docs && make html
 
 .PHONY: clean
 clean:

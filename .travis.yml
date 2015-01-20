@@ -32,6 +32,8 @@ before_install:
 # Setup XvFB
   - export DISPLAY=:99.0
   - sh -e /etc/init.d/xvfb start
+# for building the docs:
+  - sudo apt-get install graphviz
 
 install:
 # Installl requirements
@@ -39,6 +41,8 @@ install:
   - if [[ ${EVENTLOOP} == "trollius" ]]; then pip install trollius; fi
   - if [[ ${EVENTLOOP} == "tulip" ]]; then pip install asyncio; fi
   - if [[ $TRAVIS_PYTHON_VERSION == '2.6' ]]; then pip install importlib; fi
+# for building the docs:
+  - sudo pip2 install sphinx_rtd_theme sphinxcontrib-blockdiag sphinxcontrib-seqdiag sphinx
 
 after_success:
   - coveralls
