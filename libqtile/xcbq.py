@@ -69,7 +69,6 @@ HintsFlags = {
     "UrgencyHint": 256,      # urgency
 }
 
-# http://standards.freedesktop.org/wm-spec/latest/ar01s05.html#idm139870830002400
 WindowTypes = {
     '_NET_WM_WINDOW_TYPE_DESKTOP': "desktop",
     '_NET_WM_WINDOW_TYPE_DOCK': "dock",
@@ -87,7 +86,6 @@ WindowTypes = {
     '_NET_WM_WINDOW_TYPE_NORMAL': "normal",
 }
 
-# http://standards.freedesktop.org/wm-spec/latest/ar01s05.html#idm139870829988448
 WindowStates = {
     None: 'normal',
     '_NET_WM_STATE_FULLSCREEN': 'fullscreen',
@@ -132,30 +130,30 @@ PropertyMap = {
     "QTILE_INTERNAL": ("CARDINAL", 32)
 }
 
-# TODO add everything required here:
-# http://standards.freedesktop.org/wm-spec/latest/ar01s03.html
+# TODO add everything required here
+# http://standards.freedesktop.org/wm-spec/1.4/ar01s03.html
 SUPPORTED_ATOMS = [
-    # From http://standards.freedesktop.org/wm-spec/latest/ar01s03.html
-    '_NET_SUPPORTED',
+    '_NET_WM_PID',
+    '_NET_ACTIVE_WINDOW',
+    '_NET_WM_DESKTOP',
+    '_NET_CURRENT_DESKTOP',
     '_NET_CLIENT_LIST',
     '_NET_CLIENT_LIST_STACKING',
-    '_NET_CURRENT_DESKTOP',
-    '_NET_ACTIVE_WINDOW',
-    # '_NET_WORKAREA',
-    '_NET_SUPPORTING_WM_CHECK',
-    # From http://standards.freedesktop.org/wm-spec/latest/ar01s05.html
-    '_NET_WM_NAME',
-    '_NET_WM_VISIBLE_NAME',
-    '_NET_WM_ICON_NAME',
-    '_NET_WM_DESKTOP',
-    '_NET_WM_WINDOW_TYPE',
+    '_NET_SUPPORTED',
     '_NET_WM_STATE',
+    '_NET_WM_STATE_FULLSCREEN',
+    '_NET_SUPPORTING_WM_CHECK',
+    '_NET_WM_NAME',
     '_NET_WM_STRUT',
     '_NET_WM_STRUT_PARTIAL',
-    '_NET_WM_PID',
+    '_NET_WM_WINDOW_TYPE',
+    'WM_WINDOW_ROLE',
+    'WM_TAKE_FOCUS',
+    'WM_PROTOCOLS',
+    'WM_DELETE_WINDOW',
+    'UTF8_STRING',
 ]
-SUPPORTED_ATOMS.extend(WindowTypes.keys())
-SUPPORTED_ATOMS.extend(key for key in WindowStates.keys() if key)
+SUPPORTED_ATOMS += WindowTypes.keys()
 
 XCB_CONN_ERRORS = {
     1: 'XCB_CONN_ERROR',
@@ -166,6 +164,10 @@ XCB_CONN_ERRORS = {
     6: 'XCB_CONN_CLOSED_INVALID_SCREEN',
     7: 'XCB_CONN_CLOSED_FDPASSING_FAILED',
 }
+
+def toStr(s):
+    # return "".join([chr(i) for i in s.name])
+    return s.name.to_string()
 
 
 class MaskMap:
@@ -387,29 +389,31 @@ class Window:
         )
 
     def warp_pointer(self, x, y):
-        """
-            Warps the pointer to the location `x`, `y` on the window
-        """
         self.conn.conn.core.WarpPointer(
-            0, self.wid,  # src_window, dst_window
-            0, 0,         # src_x, src_y
-            0, 0,         # src_width, src_height
-            x, y          # dest_x, dest_y
+            0,
+            self.wid,
+            0,
+            0,
+            0,
+            0,
+            x,
+            y
         )
 
     def get_name(self):
         """
             Tries to retrieve a canonical window name. We test the following
-            properties in order of preference:
-                - _NET_WM_VISIBLE_NAME
-                - _NET_WM_NAME
-                - WM_NAME.
+            properties in order of preference: _NET_WM_VISIBLE_NAME,
+            _NET_WM_NAME, WM_NAME.
         """
-        r = self.get_property("_NET_WM_VISIBLE_NAME", "UTF8_STRING")
+        r = self.get_property(
+            "_NET_WM_VISIBLE_NAME",
+            xcffib.xproto.GetPropertyType.Any
+        )
         if r:
             return self._propertyUTF8(r)
 
-        r = self.get_property("_NET_WM_NAME", "UTF8_STRING")
+        r = self.get_property("_NET_WM_NAME", xcffib.xproto.GetPropertyType.Any)
         if r:
             return self._propertyUTF8(r)
 
@@ -424,7 +428,10 @@ class Window:
         r = self.get_property("WM_HINTS", xcffib.xproto.GetPropertyType.Any)
         if r:
             l = r.value.to_atoms()
-            flags = set(k for k, v in HintsFlags.items() if l[0] & v)
+            flags = set()
+            for k, v in HintsFlags.items():
+                if l[0] & v:
+                    flags.add(k)
             return dict(
                 flags=flags,
                 input=l[1],
@@ -444,7 +451,10 @@ class Window:
         )
         if r:
             l = r.value.to_atoms()
-            flags = set(k for k, v in NormalHintsFlags.items() if l[0] & v)
+            flags = set()
+            for k, v in NormalHintsFlags.items():
+                if l[0] & v:
+                    flags.add(k)
             return dict(
                 flags=flags,
                 min_width=l[1 + 4],
@@ -461,11 +471,17 @@ class Window:
             )
 
     def get_wm_protocols(self):
-        l = self.get_property("WM_PROTOCOLS", "ATOM", unpack=int)
-        return set(self.conn.atoms.get_name(i) for i in l)
+        r = self.get_property("WM_PROTOCOLS", xcffib.xproto.GetPropertyType.Any)
+        if r:
+            l = r.value.to_atoms()
+            return set([self.conn.atoms.get_name(i) for i in l])
+        else:
+            return set()
 
     def get_wm_state(self):
-        return self.get_property("WM_STATE", xcffib.xproto.GetPropertyType.Any, unpack=int)
+        r = self.get_property("WM_STATE", xcffib.xproto.GetPropertyType.Any)
+        if r:
+            return r.value.to_atoms()
 
     def get_wm_class(self):
         """
@@ -487,16 +503,12 @@ class Window:
             return list(r.value)
 
     def get_wm_icon_name(self):
-        r = self.get_property("_NET_WM_ICON_NAME", "UTF8_STRING")
-        if r:
-            return self._propertyUTF8(r)
-
-        r = self.get_property("WM_ICON_NAME", "STRING")
+        r = self.get_property("WM_ICON_NAME", "UTF8_STRING")
         if r:
             return self._propertyUTF8(r)
 
     def get_wm_client_machine(self):
-        r = self.get_property("WM_CLIENT_MACHINE", "STRING")
+        r = self.get_property("WM_CLIENT_MACHINE", "UTF8_STRING")
         if r:
             return self._propertyUTF8(r)
 
@@ -803,10 +815,19 @@ class Connection:
             count = self.setup.max_keycode - self.setup.min_keycode + 1
         q = self.conn.core.GetKeyboardMapping(first, count).reply()
 
-        assert len(q.keysyms) % q.keysyms_per_keycode == 0
-        for i in range(len(q.keysyms) // q.keysyms_per_keycode):
-            self.code_to_syms[first + i] = \
-                q.keysyms[i * q.keysyms_per_keycode:(i + 1) * q.keysyms_per_keycode]
+        l = []
+        for i, v in enumerate(q.keysyms):
+            if not i % q.keysyms_per_keycode:
+                if l:
+                    self.code_to_syms[
+                        (i // q.keysyms_per_keycode) + first - 1
+                    ] = l
+                l = []
+                l.append(v)
+            else:
+                l.append(v)
+        assert len(l) == q.keysyms_per_keycode
+        self.code_to_syms[first + count - 1] = l
 
         first_sym_to_code = {}
         for k, s in self.code_to_syms.items():
@@ -867,9 +888,9 @@ class Connection:
             return self.conn.flush()
 
     def xsync(self):
-        # The idea here is that pushing an innocuous request through the queue
-        # and waiting for a response "syncs" the connection, since requests are
-        # serviced in order.
+        # The idea here is that pushing an innocuous request through
+        # the queue and waiting for a response "syncs" the connection, since
+        # requests are serviced in order.
         self.conn.core.GetInputFocus().reply()
 
     def grab_server(self):
@@ -884,10 +905,10 @@ class Connection:
         return Font(self, fid)
 
     def extensions(self):
-        return set(
-            i.name.to_string().lower()
+        return set([
+            toStr(i).lower()
             for i in self.conn.core.ListExtensions().reply().names
-        )
+        ])
 
 
 # Stolen from samurai-x
