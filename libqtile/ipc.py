@@ -127,6 +127,7 @@ class Client(object):
         client_proto.send(msg)
 
         try:
+            print("send contents: " + str(msg))
             self.loop.run_until_complete(asyncio.wait_for(client_proto.reply, timeout=10))
         except asyncio.TimeoutError:
             raise RuntimeError("Server not responding")
