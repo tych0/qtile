@@ -69,6 +69,7 @@ class Qtile(command.CommandObject):
         logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 
         self.no_spawn = no_spawn
+        self.gobject_thread = None
 
         self._eventloop = asyncio.get_event_loop()
 
@@ -260,6 +261,7 @@ class Qtile(command.CommandObject):
                         self.qtile.exception("got exception from gobject")
             t = threading.Thread(target=gobject_thread, name="gobject_thread")
             t.start()
+            self.gobject_thread = t
         except ImportError:
             self.log.warning("importing dbus/gobject failed, dbus will not work.")
 
@@ -708,12 +710,20 @@ class Qtile(command.CommandObject):
             self.log.info('Removing io watch')
             self._eventloop.remove_reader(fd)
             self._eventloop.close()
-            self.conn.conn.disconnect()
             try:
                 from gi.repository import GObject
                 GObject.idle_add(lambda: None)
             except ImportError:
                 pass
+
+            # If the gobject thread is still processing X requests and we
+            # disconect, Bad Things can happen; instead, we should wait for it
+            # to exit since we closed the eventloop and added a function to
+            # get it to exit it's loop and check the eventloop.
+            if self.gobject_thread is not None:
+                self.gobject_thread.join()
+
+            self.conn.conn.disconnect()
 
     def find_screen(self, x, y):
         """
