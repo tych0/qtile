@@ -86,6 +86,8 @@ class Qtile(command.CommandObject):
             fname = command.find_sockfile(displayName)
 
         self.conn = xcbq.Connection(displayName)
+        atexit.register(self.conn.disconnect)
+
         self.config = config
         self.fname = fname
         hook.init(self)
@@ -666,7 +668,6 @@ class Qtile(command.CommandObject):
                     error_string = xcbq.XCB_CONN_ERRORS[error_code]
                     self.log.exception("Shutting down due to X connection error %s (%s)" %
                         (error_string, error_code))
-                    self.conn.disconnect()
                     self._eventloop.stop()
 
                 self.log.exception("Got an exception in poll loop")
@@ -708,7 +709,6 @@ class Qtile(command.CommandObject):
             self.log.info('Removing io watch')
             self._eventloop.remove_reader(fd)
             self._eventloop.close()
-            self.conn.conn.disconnect()
             try:
                 from gi.repository import GObject
                 GObject.idle_add(lambda: None)
