@@ -85,6 +85,9 @@ class Gap(command.CommandObject):
         else:
             return screen.dheight
 
+    def finalize(self):
+        pass
+
     def geometry(self):
         return (self.x, self.y, self.width, self.height)
 
@@ -184,6 +187,9 @@ class Bar(Gap, configurable.Configurable):
             qtile.registerWidget(i)
             i._configure(qtile, self)
         self._resize(self.width, self.widgets)
+
+    def finalize(self):
+        self.drawer.finalize()
 
     def _resize(self, width, widgets):
         stretches = [i for i in widgets if i.width_type == STRETCH]
