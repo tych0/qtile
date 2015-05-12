@@ -82,6 +82,7 @@ class File(object):
             "widget_defaults",
             "bring_front_click",
             "wmname",
+            "set_cursor",
         ]
 
         for option in config_options:
