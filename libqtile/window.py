@@ -716,12 +716,7 @@ class Window(_Window):
         self.updateName()
         # add to group by position according to _NET_WM_DESKTOP property
         index = window.get_wm_desktop()
-        if index is not None and index < len(qtile.groups):
-            group = qtile.groups[index]
-            group.add(self)
-            self._group = group
-            if group != qtile.currentScreen.group:
-                self.hide()
+        self.set_group_by_NET_WM_DESKTOP(index)
 
         # add window to the save-set, so it gets mapped when qtile dies
         qtile.conn.conn.core.ChangeSaveSet(SetMode.Insert, self.window.wid)
@@ -811,6 +806,14 @@ class Window(_Window):
         self.qtile.windowMap[self.window.wid] = s
         hook.fire("client_managed", s)
         return s
+
+    def set_group_by_NET_WM_DESKTOP(self, index):
+        if index is not None and index < len(qtile.groups):
+            group = qtile.groups[index]
+            group.add(self)
+            self._group = group
+            if group != qtile.currentScreen.group:
+                self.hide()
 
     def tweak_float(self, x=None, y=None, dx=0, dy=0,
                     w=None, h=None, dw=0, dh=0):
@@ -1169,6 +1172,8 @@ class Window(_Window):
             # are set when the property is emitted
             # self.updateState()
             self.updateState()
+            self.set_group_by_NET_WM_DESKTOP(e.state)
+
         elif name == "_NET_WM_USER_TIME":
             if not self.qtile.config.follow_mouse_focus and \
                     self.group.currentWindow != self:
