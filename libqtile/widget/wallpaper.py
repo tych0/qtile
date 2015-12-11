@@ -32,10 +32,11 @@ class Wallpaper(base._TextBox):
          "Wallpaper Directory"),
         ("wallpaper", None, "Wallpaper"),
         ("wallpaper_command", None, "Wallpaper command"),
+        ("display_name", True, "Display the wallpaper name"),
     ]
 
     def __init__(self, **config):
-        base._TextBox.__init__(self, 'empty', width=bar.CALCULATED, **config)
+        base._TextBox.__init__(self, '', width=bar.CALCULATED, **config)
         self.add_defaults(Wallpaper.defaults)
         self.index = 0
         self.images = []
@@ -63,7 +64,8 @@ class Wallpaper(base._TextBox):
             else:
                 self.images.append(self.wallpaper)
         cur_image = self.images[self.index]
-        self.text = os.path.basename(cur_image)
+        if display_name:
+            self.text = os.path.basename(cur_image)
         if self.wallpaper_command:
             self.wallpaper_command.append(cur_image)
             subprocess.call(self.wallpaper_command)
