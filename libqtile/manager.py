@@ -53,11 +53,11 @@ from .utils import QtileError, get_cache_dir
 from .widget.base import _Widget
 from .extension.base import _Extension
 from . import command
+from . import drawer
 from . import hook
 from . import utils
 from . import window
 from . import xcbq
-from . import pangocffi
 
 
 if sys.version_info >= (3, 3):
@@ -325,7 +325,7 @@ class Qtile(command.CommandObject):
         self.root.set_property("RESOURCE_MANAGER", "Xft.dpi: %d\n" % dpi,
                                type="STRING", format=8,
                                mode=xcffib.xproto.PropMode.Append)
-        pangocffi.set_default_dpi(dpi)
+        drawer.dpi = dpi
 
     def finalize(self):
         self._finalize = True

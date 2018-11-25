@@ -40,6 +40,11 @@ from . import pangocffi
 from . import utils
 
 
+# The default DPI for drawing; set up in the manager's __init__() after being
+# multiplied by a scaling factor.
+dpi = 96
+
+
 class TextLayout(object):
     def __init__(self, drawer, text, colour, font_family, font_size,
                  font_shadow, wrap=True, markup=False):
@@ -79,7 +84,8 @@ class TextLayout(object):
         if self._width is not None:
             return self._width
         else:
-            return self.layout.get_pixel_size()[0]
+            width, _ = self.layout.get_pixel_size()
+            return width * dpi / 96.
 
     @width.setter
     def width(self, value):
@@ -323,6 +329,7 @@ class Drawer(object):
 
     def new_ctx(self):
         ctx = cairocffi.Context(self.surface)
+        ctx.scale(float(dpi) / 96.)
         return ctx
 
     def set_source_rgb(self, colour):

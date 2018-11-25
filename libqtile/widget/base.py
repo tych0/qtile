@@ -367,6 +367,15 @@ class _TextBox(_Widget):
         )
 
     def calculate_length(self):
+        """
+        l = min(
+            self.layout.width,
+            self.bar.width
+        ) + self.actual_padding * 2
+        myx, myy = self.drawer.context_size()
+
+        logger.error("length of: %s, %d (%d, %d)", self.text, l, myx, myy)
+        """
         if self.text:
             return min(
                 self.layout.width,
