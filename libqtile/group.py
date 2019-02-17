@@ -357,13 +357,16 @@ class _Group(command.CommandObject):
         """Returns a dictionary of info for this group"""
         return self.info()
 
-    def cmd_toscreen(self, screen=None):
+    def cmd_toscreen(self, screen=None, skip_managed=False):
         """Pull a group to a specified screen.
 
         Parameters
         ==========
         screen :
             Screen offset. If not specified, we assume the current screen.
+        skip_managed :
+            Whether or not to skip this command if the group is currently
+            managed. Defaults to false, i.e. always switch groups.
 
         Examples
         ========
@@ -375,6 +378,8 @@ class _Group(command.CommandObject):
 
             toscreen(0)
         """
+        if self.screen is not None and skip_managed:
+            return
         if screen is None:
             screen = self.qtile.current_screen
         else:
