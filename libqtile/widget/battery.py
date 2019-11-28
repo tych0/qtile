@@ -207,8 +207,8 @@ class _LinuxBattery(_Battery, configurable.Configurable):
                                        self._get_battery_name(),
                                        'ACPI name of a battery, usually BAT0'))
 
-        configurable.Configurable.__init__(self, **config)
         self.add_defaults(_LinuxBattery.defaults)
+        configurable.Configurable.__init__(self, **config)
 
     def _get_battery_name(self):
         if os.path.isdir(self.BAT_DIR):
