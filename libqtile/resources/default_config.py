@@ -104,6 +104,7 @@ layouts = [
     # layout.TreeTab(),
     # layout.VerticalTile(),
     # layout.Zoomy(),
+    # layout.FloatingTile(),
 ]
 
 widget_defaults = dict(

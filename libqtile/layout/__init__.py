@@ -26,7 +26,7 @@
 
 from libqtile.layout.bsp import Bsp
 from libqtile.layout.columns import Columns
-from libqtile.layout.floating import Floating
+from libqtile.layout.floating import Floating, FloatingTile
 from libqtile.layout.matrix import Matrix
 from libqtile.layout.max import Max
 from libqtile.layout.ratiotile import RatioTile

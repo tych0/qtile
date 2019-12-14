@@ -264,9 +264,10 @@ class _Group(CommandObject):
             pass  # doesn't matter
         if win.floating:
             self.floating_layout.add(win)
-        else:
-            for i in self.layouts:
-                i.add(win)
+
+        for i in self.layouts:
+            i.add(win)
+
         if focus:
             self.focus(win, warp=True, force=force)
 
@@ -274,21 +275,24 @@ class _Group(CommandObject):
         self.windows.remove(win)
         hadfocus = self._remove_from_focus_history(win)
         win.group = None
+        nextfocus = None
+
+        # Remove it from normal layouts first, and then from the floating layout
+        for i in self.layouts:
+            if i is self.layout:
+                nextfocus = i.remove(win)
+            else:
+                i.remove(win)
 
         if win.floating:
             nextfocus = self.floating_layout.remove(win)
 
+        if win.floating:
             nextfocus = nextfocus or \
                 self.current_window or \
                 self.layout.focus_first() or \
                 self.floating_layout.focus_first(group=self)
         else:
-            for i in self.layouts:
-                if i is self.layout:
-                    nextfocus = i.remove(win)
-                else:
-                    i.remove(win)
-
             nextfocus = nextfocus or \
                 self.floating_layout.focus_first(group=self) or \
                 self.current_window or \
@@ -310,7 +314,7 @@ class _Group(CommandObject):
                 pass
             else:
                 for i in self.layouts:
-                    i.remove(win)
+                    i.floating_on(win)
                     if win is self.current_window:
                         i.blur()
                 self.floating_layout.add(win)
@@ -320,7 +324,7 @@ class _Group(CommandObject):
             self.floating_layout.remove(win)
             self.floating_layout.blur()
             for i in self.layouts:
-                i.add(win)
+                i.floating_off(win)
                 if win is self.current_window:
                     i.focus(win)
         self.layout_all()
