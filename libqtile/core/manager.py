@@ -288,9 +288,6 @@ class Qtile(CommandObject):
         except:  # noqa: E722
             logger.exception('exception during finalize')
 
-        for task in asyncio.all_tasks(self._eventloop):
-            task.cancel()
-
     def _process_fake_screens(self):
         """
         Since Xephyr and Xnest don't really support offset screens, we'll fake
