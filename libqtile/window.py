@@ -567,6 +567,7 @@ class _Window(CommandObject):
                 )
 
                 self.window.send_event(e)
+                self.qtile.root.set_property("_NET_ACTIVE_WINDOW", self.window.wid)
 
             # Never send FocusIn to java windows
             elif not is_java and self.hints['input']:
@@ -587,7 +588,6 @@ class _Window(CommandObject):
                 state.remove(atom)
                 self.window.set_property('_NET_WM_STATE', state)
 
-        self.qtile.root.set_property("_NET_ACTIVE_WINDOW", self.window.wid)
         hook.fire("client_focus", self)
 
     def _items(self, name):
