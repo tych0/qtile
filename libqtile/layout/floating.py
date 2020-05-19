@@ -28,6 +28,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import xcffib.xproto import StackMode
 from libqtile.layout.base import Layout
 
 DEFAULT_FLOAT_WM_TYPES = set([
@@ -214,19 +215,19 @@ class Floating(Layout):
         cls = client.window.get_wm_class() or ''
         is_java_dropdown = 'sun-awt-X11-XWindowPeer' in cls
         if is_java_dropdown:
-            client.unhide()
+            client.window.configure(stackmode=StackMode.Above)
             return
 
         # similar to above but the X11 version, the client may have already
         # placed itself. let's respect that
         if client.has_user_set_position():
-            client.unhide()
+            client.window.configure(stackmode=StackMode.Above)
             return
 
         # ok, it's not java and the window itself didn't position it, but users
         # may still have asked us not to mess with it
         if self.no_reposition_match is not None and self.no_reposition_match.compare(client):
-            client.unhide()
+            client.window.configure(stackmode=StackMode.Above)
             return
 
         if client.has_focus:
