@@ -209,24 +209,28 @@ class Floating(Layout):
         return above
 
     def configure(self, client, screen):
+        g = client.get_geometry()
         # 'sun-awt-X11-XWindowPeer' is a dropdown used in Java application,
         # don't reposition it anywhere, let Java app to control it
         cls = client.window.get_wm_class() or ''
         is_java_dropdown = 'sun-awt-X11-XWindowPeer' in cls
         if is_java_dropdown:
             client.unhide()
+            client.send_configure_notify(g.x, g.y, g.width, g.height)
             return
 
         # similar to above but the X11 version, the client may have already
         # placed itself. let's respect that
         if client.has_user_set_position():
             client.unhide()
+            client.send_configure_notify(g.x, g.y, g.width, g.height)
             return
 
         # ok, it's not java and the window itself didn't position it, but users
         # may still have asked us not to mess with it
         if self.no_reposition_match is not None and self.no_reposition_match.compare(client):
             client.unhide()
+            client.send_configure_notify(g.x, g.y, g.width, g.height)
             return
 
         if client.has_focus:
