@@ -80,7 +80,7 @@ class QtileState:
         if self.orphans:
             hook.subscribe.client_new(self.handle_orphan_dropdowns)
 
-        qtile.focus_screen(self.current_screen)
+        qtile.current_group.focus(qtile.current_screen, warp=False)
 
     def handle_orphan_dropdowns(self, client):
         """
