@@ -177,12 +177,16 @@ class Qtile(CommandObject):
             hook.fire("startup_once")
         hook.fire("startup")
 
+
         if state:
+            active_wid = self.root.get_property("_NET_ACTIVE_WINDOW")
             st = pickle.load(io.BytesIO(state.encode()))
             try:
                 st.apply(self)
             except:  # noqa: E722
                 logger.exception("failed restoring state")
+            last_focused = self.windows_map.get(active_wid)
+            last_focused.group.focus(last_focused)
 
         self.core.scan()
         self.update_net_desktops()
