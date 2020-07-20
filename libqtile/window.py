@@ -317,6 +317,21 @@ class _Window(CommandObject):
 
         return
 
+    def unset_axis_maximize(self, state):
+        if 'maximized_vert' not in state and 'maximized_horz' not in state:
+            return
+
+        logger.error("unsetting wm state axis maximize {}".format(state))
+        vert = self.qtile.conn.atoms["_NET_WM_STATE_MAXIMIZED_VERT"]
+        horz = self.qtile.conn.atoms["_NET_WM_STATE_MAXIMIZED_HORZ"]
+        # get the state as an atoms list
+        state = list(self.window.get_property('_NET_WM_STATE', 'ATOM', unpack=int))
+        # remove unsupported properties
+        state.remove(vert)
+        state.remove(horz)
+        # re-set the state
+        self.window.set_property('_NET_WM_STATE', state)
+
     def update_state(self):
         triggered = ['urgent']
 
@@ -324,6 +339,7 @@ class _Window(CommandObject):
             triggered.append('fullscreen')
 
         state = self.window.get_net_wm_state()
+        self.unset_axis_maximize(state)
 
         logger.debug('_NET_WM_STATE: %s', state)
         for s in triggered:
