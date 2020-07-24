@@ -296,6 +296,12 @@ class _Widget(CommandObject, configurable.Configurable):
     def create_mirror(self):
         return Mirror(self)
 
+    def enter_notify(self, x, y):
+        pass
+
+    def leave_notify(self, x, y):
+        pass
+
 
 UNSPECIFIED = bar.Obj("UNSPECIFIED")
 

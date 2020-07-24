@@ -43,7 +43,6 @@ _IGNORED_EVENTS = {
     xcffib.xproto.FocusInEvent,
     xcffib.xproto.FocusOutEvent,
     xcffib.xproto.KeyReleaseEvent,
-    xcffib.xproto.LeaveNotifyEvent,
     # DWM handles this to help "broken focusing windows".
     xcffib.xproto.MapNotifyEvent,
     xcffib.xproto.NoExposureEvent,

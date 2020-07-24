@@ -304,6 +304,24 @@ class Bar(Gap, configurable.Configurable):
                 e.detail
             )
 
+    def handle_EnterNotify(self, e):  # noqa: N802
+        widget = self.get_widget_in_position(e)
+        if widget:
+            widget.handle(
+                e.event_x - widget.offsetx,
+                e.event_y - widget.offsety,
+                e.detail
+            )
+
+    def handle_LeaveNotify(self, e):  # noqa: N802
+        widget = self.get_widget_in_position(e)
+        if widget:
+            widget.handle(
+                e.event_x - widget.offsetx,
+                e.event_y - widget.offsety,
+                e.detail
+            )
+
     def widget_grab_keyboard(self, widget):
         """
             A widget can call this method to grab the keyboard focus
