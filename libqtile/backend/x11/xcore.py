@@ -51,6 +51,14 @@ _IGNORED_EVENTS = {
 }
 
 
+def get_keys() -> List[str]:
+    return list(xcbq.keysyms.keys())
+
+
+def get_modifiers() -> List[str]:
+    return list(xcbq.ModMasks.keys())
+
+
 class ExistingWMException(Exception):
     pass
 
@@ -376,12 +384,6 @@ class XCore(base.Core):
     def display_name(self) -> str:
         """The name of the connected display"""
         return self._display_name
-
-    def get_keys(self) -> List[str]:
-        return list(xcbq.keysyms.keys())
-
-    def get_modifiers(self) -> List[str]:
-        return list(xcbq.ModMasks.keys())
 
     def update_client_list(self, windows) -> None:
         """Set the current clients to the given list of windows"""
