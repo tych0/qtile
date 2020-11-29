@@ -40,6 +40,13 @@ qtile X.X.X, released XXXX-XX-XX:
         - Python 3.9 support
         - switch to Github Actions for CI
         - libqtile now exports type information
+        - add a new `qtile check` subcommand, which will check qtile configs
+          for various things:
+              - validates configs against the newly exported type information
+                if mypy is present in the environment
+              - validates that qtile can import the config file (e.g. that
+                syntax is correct, ends in a .py extension, etc.)
+              - validates Key and Mouse mod/keysym arguments are ok.
     !!! warning !!!
         - When (re)starting, Qtile passes its state to the new process in a
           file now, where previously it passed state directly as a string. This
