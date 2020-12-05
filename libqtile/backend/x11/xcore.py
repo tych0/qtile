@@ -399,8 +399,10 @@ class XCore(base.Core):
         self._root.set_property("_NET_DESKTOP_NAMES", "\0".join(i.name for i in groups))
         self._root.set_property("_NET_CURRENT_DESKTOP", index)
         current = groups[index]
-        viewport = [current.screen.x, current.screen.y] if current.screen else [0, 0]
-        self._root.set_property("_NET_DESKTOP_VIEWPORT", viewport)
+        viewport = []
+        for screen in self.conn.pseudoscreens:
+            viewport += [screen.x, screen.y]
+        self._root.set_property("_NET_DESKTOP_VIEWPORT", viewport, type="CARDINAL", format=32)
 
     def lookup_key(self, key: config.Key) -> Tuple[int, int]:
         """Find the keysym and the modifier mask for the given key"""
