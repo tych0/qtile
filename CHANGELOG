@@ -6,6 +6,7 @@ Qtile 0.x.x, released xxxx-xx-xx:
           dbus calls within asyncio's eventloop.
         - widget.BatteryIcon no longer has a fallback text mode; use
           widget.Battery instead
+        - XMonad layout key new_at_current is deprecated, use new_client_position.
     * features
         - added measure_mem and measure_swap attributes to memory widget to allow user to choose measurement units.
         - memory widget can now be displayed with decimal values

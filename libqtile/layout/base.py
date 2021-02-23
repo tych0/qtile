@@ -320,6 +320,19 @@ class _ClientList:
         """
         self.clients.append(client)
 
+    def standard_add(self, client, position="after_current"):
+        """
+        Insert the client at the explicit position.
+        """
+        if position == "after_current":
+            self.add(client, 1)
+        elif position == "before_current":
+            self.add(client, 0)
+        elif position == "top":
+            self.append_head(client)
+        else:  # ie position == "bottom"
+            self.append(client)
+
     def remove(self, client):
         """
         Remove the given client from collection.
