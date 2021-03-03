@@ -113,3 +113,12 @@ def test_extra_files_are_ok():
         with open(os.path.join(tempdir, "bar.py"), "w") as config:
             config.write("foo = 42")
         assert run_qtile_check(config_file)
+
+
+def test_qtile_commands_ok():
+    assert check_literal_config("""
+        from libqtile import init, qtile
+
+        init("foo")
+        qtile.cmd_spawn(["rm", "-rf", "/"])
+    """)

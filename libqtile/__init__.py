@@ -19,10 +19,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from typing import Optional
 
-qtile = None
+from libqtile.core.manager import Qtile
 
+qtile: Optional[Qtile] = None
 
-def init(q):
+def init(q: Qtile):
     global qtile
     qtile = q
