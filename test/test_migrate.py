@@ -137,3 +137,25 @@ def test_pacman():
     """)
 
     check_migrate(orig, expected)
+
+
+def test_new_at_current_to_new_client_position():
+    orig = textwrap.dedent("""
+        from libqtile import layout
+
+        layouts = [
+            layout.MonadTall(border_focus='#ff0000', new_at_current=False),
+            layout.MonadWide(new_at_current=True, border_focus='#ff0000'),
+        ]
+    """)
+
+    expected = textwrap.dedent("""
+        from libqtile import layout
+
+        layouts = [
+            layout.MonadTall(border_focus='#ff0000', new_client_position=after_current),
+            layout.MonadWide(new_client_position=before_current, border_focus='#ff0000'),
+        ]
+    """)
+
+    check_migrate(orig, expected)

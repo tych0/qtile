@@ -50,13 +50,13 @@ def monadtall_config(x):
     return no_xinerama(pytest.mark.parametrize("manager", [MonadTallConfig], indirect=True)(x))
 
 
-class MonadTallNewAtCurrentConfig(Config):
+class MonadTallNCPBeforeCurrentConfig(Config):
     auto_fullscreen = True
     groups = [
         libqtile.config.Group("a")
     ]
     layouts = [
-        layout.MonadTall(new_at_current=True)
+        layout.MonadTall(new_client_position='before_current')
     ]
     floating_layout = libqtile.resources.default_config.floating_layout
     keys = []
@@ -65,17 +65,17 @@ class MonadTallNewAtCurrentConfig(Config):
     follow_mouse_focus = False
 
 
-def monadtallnewatcurrent_config(x):
-    return no_xinerama(pytest.mark.parametrize("manager", [MonadTallNewAtCurrentConfig], indirect=True)(x))
+def monadtallncpbeforecurrent_config(x):
+    return no_xinerama(pytest.mark.parametrize("manager", [MonadTallNCPBeforeCurrentConfig], indirect=True)(x))
 
 
-class MonadTallNewCLientPositionMixKeyConfig(Config):
+class MonadTallNCPAfterCurrentConfig(Config):
     auto_fullscreen = True
     groups = [
         libqtile.config.Group("a")
     ]
     layouts = [
-        layout.MonadTall(new_at_current=True, new_client_position="after_current")
+        layout.MonadTall(new_client_position="after_current")
     ]
     floating_layout = libqtile.resources.default_config.floating_layout
     keys = []
@@ -84,8 +84,8 @@ class MonadTallNewCLientPositionMixKeyConfig(Config):
     follow_mouse_focus = False
 
 
-def monadtallnewclientpositionmixkey_config(x):
-    return no_xinerama(pytest.mark.parametrize("manager", [MonadTallNewCLientPositionMixKeyConfig], indirect=True)(x))
+def monadtallncpaftercurrent_config(x):
+    return no_xinerama(pytest.mark.parametrize("manager", [MonadTallNCPAfterCurrentConfig], indirect=True)(x))
 
 
 class MonadTallNewCLientPositionBottomConfig(Config):
@@ -205,9 +205,9 @@ def test_tall_add_clients(manager):
     assert_focused(manager, 'four')
 
 
-@monadtallnewatcurrent_config
-def test_tall_add_clients_with_new_at_current(manager):
-    """ Test add client as if new_client_position = before_current. """
+@monadtallncpbeforecurrent_config
+def test_tall_add_clients_before_current(manager):
+    """ Test add client with new_client_position = before_current. """
     manager.test_window('one')
     manager.test_window('two')
     manager.test_window('three')
@@ -221,8 +221,8 @@ def test_tall_add_clients_with_new_at_current(manager):
     assert_focused(manager, 'four')
 
 
-@monadtallnewclientpositionmixkey_config
-def test_tall_add_clients_with_mix_key(manager):
+@monadtallncpaftercurrent_config
+def test_tall_add_clients_after_current(manager):
     manager.test_window('one')
     manager.test_window('two')
     manager.test_window('three')
