@@ -28,8 +28,8 @@
 import collections
 
 import libqtile.hook
-from libqtile.command import lazy
 from libqtile.config import Group, Key, Match, Rule
+from libqtile.lazy import lazy
 from libqtile.log_utils import logger
 
 

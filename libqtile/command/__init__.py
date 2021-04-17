@@ -22,10 +22,7 @@
 The deprecated lazy command objects
 """
 
-import warnings
-
 from libqtile.command import base, client, graph, interface
-from libqtile.lazy import LazyCommandInterface
 
 __all__ = [
     'lazy',
@@ -34,13 +31,3 @@ __all__ = [
     'graph',
     'interface',
 ]
-
-
-class _LazyTree(client.InteractiveCommandClient):
-    def __getattr__(self, name: str) -> client.InteractiveCommandClient:
-        """Get the child element of the currently selected object"""
-        warnings.warn("libqtile.command.lazy is deprecated, use libqtile.lazy.lazy", DeprecationWarning)
-        return super().__getattr__(name)
-
-
-lazy = _LazyTree(LazyCommandInterface())
