@@ -193,6 +193,7 @@ class Bar(Gap, configurable.Configurable):
         self.queued_draws = 0
         self.future = None
         self._borders_drawn = False
+        self.has_keyboard = None
 
     def _configure(self, qtile, screen, reconfigure=False):
         """
