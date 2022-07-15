@@ -1,5 +1,5 @@
 setuptools_scm
-cffi <= 1.15.0
+cffi
 sphinx
 sphinx_rtd_theme
 funcparserlib==1.0.0a0
