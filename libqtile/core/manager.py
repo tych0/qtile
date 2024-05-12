@@ -46,6 +46,7 @@ from libqtile.command.interface import IPCCommandServer, QtileCommandInterface
 from libqtile.config import Click, Drag, Key, KeyChord, Match, Mouse, Rule
 from libqtile.config import ScratchPad as ScratchPadConfig
 from libqtile.config import Screen
+from libqtile.core.base import ScreenInfo
 from libqtile.core.lifecycle import lifecycle
 from libqtile.core.loop import LoopContext, QtileEventLoopPolicy
 from libqtile.core.state import QtileState
@@ -357,17 +358,19 @@ class Qtile(CommandObject):
         screens = []
 
         if hasattr(self.config, "fake_screens"):
-            screen_info = [(s.x, s.y, s.width, s.height) for s in self.config.fake_screens]
+            screen_info = [
+                ScreenInfo(s.x, s.y, s.width, s.height) for s in self.config.fake_screens
+            ]
             config = self.config.fake_screens
         else:
             # Alias screens with the same x and y coordinates, taking largest
             xywh = {}  # type: dict[tuple[int, int], tuple[int, int]]
-            for sx, sy, sw, sh in self.core.get_screen_info():
-                pos = (sx, sy)
+            for info in self.core.get_screen_info():
+                pos = (info.x, info.y)
                 width, height = xywh.get(pos, (0, 0))
-                xywh[pos] = (max(width, sw), max(height, sh))
+                xywh[pos] = (max(width, info.width), max(height, info.height))
 
-            screen_info = [(x, y, w, h) for (x, y), (w, h) in xywh.items()]
+            screen_info = [ScreenInfo(x, y, w, h) for (x, y), (w, h) in xywh.items()]
             config = self.config.screens
 
         for i, (x, y, w, h) in enumerate(screen_info):

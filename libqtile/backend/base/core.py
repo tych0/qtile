@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import typing
 from abc import ABCMeta, abstractmethod
+from dataclasses import dataclass
 
 from libqtile.command.base import CommandObject, expose_command
 
@@ -14,6 +15,14 @@ if typing.TYPE_CHECKING:
     from libqtile.command.base import ItemT
     from libqtile.core.manager import Qtile
     from libqtile.group import _Group
+
+
+@dataclass
+class ScreenInfo:
+    x: int
+    y: int
+    width: int
+    height: int
 
 
 class Core(CommandObject, metaclass=ABCMeta):
@@ -54,7 +63,7 @@ class Core(CommandObject, metaclass=ABCMeta):
         """Set the current desktops of the window manager"""
 
     @abstractmethod
-    def get_screen_info(self) -> list[tuple[int, int, int, int]]:
+    def get_screen_info(self) -> list[ScreenInfo]:
         """Get the screen information"""
 
     @abstractmethod

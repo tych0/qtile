@@ -31,6 +31,7 @@ from wlroots.wlr_types.layer_shell_v1 import (
     LayerSurfaceV1KeyboardInteractivity,
 )
 
+from libqtile.backend.base import ScreenInfo
 from libqtile.backend.wayland.wlrq import HasListeners
 from libqtile.log_utils import logger
 
@@ -77,7 +78,8 @@ class Output(HasListeners):
         self.scene_output.destroy()
 
     def __repr__(self) -> str:
-        return "<Output (%s, %s, %s, %s)>" % self.get_geometry()
+        i = self.get_screen_info()
+        return f"<Output ({i.x}, {i.y}, {i.width}, {i.height})>"
 
     @property
     def screen(self) -> Screen:
@@ -105,9 +107,9 @@ class Output(HasListeners):
         # Inform clients of the frame
         self.scene_output.send_frame_done(Timespec.get_monotonic_time())
 
-    def get_geometry(self) -> tuple[int, int, int, int]:
+    def get_screen_info(self) -> ScreenInfo:
         width, height = self.wlr_output.effective_resolution()
-        return int(self.x), int(self.y), width, height
+        return ScreenInfo(int(self.x), int(self.y), width, height)
 
     def organise_layers(self) -> None:
         """Organise the positioning of layer shell surfaces."""

@@ -183,23 +183,8 @@ class Core(base.Core):
             delattr(self, "qtile")
         self.conn.finalize()
 
-    def get_screen_info(self) -> list[tuple[int, int, int, int]]:
-        info = [(s.x, s.y, s.width, s.height) for s in self.conn.pseudoscreens]
-
-        if not info:
-            info.append(
-                (
-                    0,
-                    0,
-                    self.conn.default_screen.width_in_pixels,
-                    self.conn.default_screen.height_in_pixels,
-                )
-            )
-
-        if self.qtile:
-            self._xpoll()
-
-        return info
+    def get_screen_info(self) -> list[base.ScreenInfo]:
+        return self.conn.pseudoscreens
 
     @property
     def wmname(self):

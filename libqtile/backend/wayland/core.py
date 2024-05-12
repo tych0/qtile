@@ -476,7 +476,7 @@ class Core(base.Core, wlrq.HasListeners):
         if not self._current_output:
             self._current_output = output
             self.cursor_manager.set_cursor_image("left_ptr", self.cursor)
-            box = Box(*output.get_geometry())
+            box = Box(*output.get_screen_info())
             x = box.x + box.width / 2
             y = box.y + box.height / 2
             self.warp_pointer(x, y)
@@ -1432,9 +1432,9 @@ class Core(base.Core, wlrq.HasListeners):
 
         self.idle.set_enabled(self.seat, True)
 
-    def get_screen_info(self) -> list[tuple[int, int, int, int]]:
+    def get_screen_info(self) -> list[base.ScreenInfo]:
         """Get the output information"""
-        return [output.get_geometry() for output in self.outputs]
+        return [output.get_screen_info() for output in self.outputs]
 
     def grab_key(self, key: config.Key | config.KeyChord) -> tuple[int, int]:
         """Configure the backend to grab the key event"""
