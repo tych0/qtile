@@ -124,7 +124,9 @@ def test_qtile_cmd(manager):
     assert group["layouts"] == ["stack", "stack", "stack"]
     assert group["focus"] == "foo"
 
-    assert run_qtile_cmd("-s {} -o screen {} -f info".format(manager.sockfile, 0)) == {
+    result = run_qtile_cmd("-s {} -o screen {} -f info".format(manager.sockfile, 0))
+    result = {key: result[key] for key in ["x", "y", "index", "width", "height"]}
+    assert result == {
         "height": 600,
         "index": 0,
         "width": 800,
