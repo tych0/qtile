@@ -12,6 +12,6 @@ numpydoc
 pytest
 PyGObject
 dbus-next
-cairocffi>=1.6.0
+cairocffi>=1.7.0
 xcffib>=1.4.0
 libcst>=1.0.0
