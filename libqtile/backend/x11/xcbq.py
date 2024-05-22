@@ -298,28 +298,19 @@ class AtomCache:
         return self.atoms[key]
 
 
-class _Wrapper:
-    def __init__(self, wrapped):
-        self.wrapped = wrapped
-
-    def __getattr__(self, x):
-        return getattr(self.wrapped, x)
-
-
-class Screen(_Wrapper):
+class Screen:
     """
     This represents an actual X screen.
     """
 
     def __init__(self, conn, screen):
-        _Wrapper.__init__(self, screen)
         self.default_colormap = Colormap(conn, screen.default_colormap)
-        self.root = window.XWindow(conn, self.root)
+        self.root = window.XWindow(conn, screen)
 
         self._visuals = {}
 
         # Get visuals for 32 and 24 bit
-        for d in [32, 24, self.root_depth]:
+        for d in [32, 24, self.root.root_depth]:
             if d not in self._visuals:
                 visual = self.get_visual_for_depth(self, d)
                 if visual:
