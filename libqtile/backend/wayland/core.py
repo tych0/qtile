@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Any
 
 from libqtile import hook
 from libqtile.backend import base
+from libqtile.backend.base.core import Output
 from libqtile.backend.wayland import inputs
 from libqtile.backend.wayland.window import Internal, Static, Window
 from libqtile.command.base import allow_when_locked, expose_command
@@ -511,16 +512,21 @@ class Core(base.Core):
         self.qtile.manage(internal)
         return internal
 
-    def get_screen_info(self) -> list[ScreenRect]:
-        rects = []
+    def get_output_info(self) -> list[Output]:
+        outputs = []
 
-        @ffi.callback("void(int, int, int, int)")
-        def loop(x: int, y: int, width: int, height: int) -> None:
-            rects.append(ScreenRect(x, y, width, height))
+        @ffi.callback("void(int, int, int, int, char *, char *)")
+        def loop(
+            x: int, y: int, width: int, height: int, serial: ffi.CData, name: ffi.CData
+        ) -> None:
+            serial_str = ffi.string(serial).decode() if serial != ffi.NULL else None
+            name_str = ffi.string(name).decode() if name != ffi.NULL else None
+            rect = ScreenRect(x, y, width, height)
+            outputs.append(Output(name_str, serial_str, rect))
 
         lib.qw_server_loop_output_dims(self.qw, loop)
 
-        return rects
+        return outputs
 
     def _get_sym_from_code(self, keycode: int) -> str:
         # TODO: test keycodes
