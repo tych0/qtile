@@ -481,7 +481,9 @@ class Connection:
 
     @property
     def pseudoscreens(self):
-        if hasattr(self, "xinerama"):
+        if hasattr(self, "randr"):
+            return self.randr.query_crtcs(self.screens[0].root.wid)
+        elif hasattr(self, "xinerama"):
             pseudoscreens = []
             for i, s in enumerate(self.xinerama.query_screens()):
                 scr = ScreenRect(
@@ -492,8 +494,7 @@ class Connection:
                 )
                 pseudoscreens.append(scr)
             return pseudoscreens
-        elif hasattr(self, "randr"):
-            return self.randr.query_crtcs(self.screens[0].root.wid)
+        raise Exception("no randr or xinerama?")
 
     def finalize(self):
         self.cursors.finalize()
