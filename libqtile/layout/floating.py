@@ -269,6 +269,14 @@ class Floating(Layout):
                 above = True
                 self.compute_client_position(client, screen_rect)
 
+            # WM_TRANSIENT_FOR windows are dialogs/menus/etc. used for other
+            # windows.; we should always place them above everything else when
+            # placing them. In particular, firefox uses the same
+            # WM_TRANSIENT_FOR window for context menus and maps/unmaps it, so
+            # we want to force it to above on every re-map.
+            if client.is_transient_for():
+                above = True
+
             client.place(
                 client.x,
                 client.y,
