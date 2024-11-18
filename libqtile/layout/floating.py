@@ -206,11 +206,13 @@ class Floating(Layout):
         """recompute client.x and client.y, returning whether or not to place
         this client above other windows or not"""
         above = True
+        new_x = client.x
+        new_y = client.y
 
         if client.has_user_set_position() and not self.on_screen(client, screen_rect):
             # move to screen
-            client.x = screen_rect.x + client.x
-            client.y = screen_rect.y + client.y
+            new_x = screen_rect.x + client.x
+            new_y = screen_rect.y + client.y
         if not client.has_user_set_position() or not self.on_screen(client, screen_rect):
             # client has not been properly placed before or it is off screen
             transient_for = client.is_transient_for()
@@ -235,9 +237,9 @@ class Floating(Layout):
             # or top
             y = max(y, screen_rect.y)
 
-            client.x = int(round(x))
-            client.y = int(round(y))
-        return above
+            new_x = int(round(x))
+            new_y = int(round(y))
+        return (new_x, new_y, above)
 
     def configure(self, client: Window, screen_rect: ScreenRect) -> None:
         if client.has_focus:
@@ -271,11 +273,11 @@ class Floating(Layout):
             # We definitely have a screen here, so let's be sure we'll float on screen
             if client.float_x is None or client.float_y is None:
                 # this window hasn't been placed before, let's put it in a sensible spot
-                above = self.compute_client_position(client, screen_rect)
+                (new_x, new_y, above) = self.compute_client_position(client, screen_rect)
 
             client.place(
-                client.x,
-                client.y,
+                new_x,
+                new_y,
                 client.width,
                 client.height,
                 bw,

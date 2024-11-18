@@ -248,6 +248,10 @@ class Bar(Gap, configurable.Configurable, CommandObject):
         """
         # We only want to adjust margin sizes once unless there's new space being
         # reserved or we're reconfiguring the bar because the screen has changed
+        new_x = self.x
+        new_y = self.y
+        new_width = self.width
+        new_height = self.height
         if not self._configured or self._reserved_space_updated or reconfigure:
             Gap._configure(self, qtile, screen)
 
@@ -257,39 +261,39 @@ class Bar(Gap, configurable.Configurable, CommandObject):
                 margin = [b + s for b, s in zip(self.border_width, self._reserved_space)]
 
                 if self.horizontal:
-                    self.x += margin[3] - self.border_width[3]
-                    self.width -= margin[1] + margin[3]
+                    new_x += margin[3] - self.border_width[3]
+                    new_width -= margin[1] + margin[3]
                     self._length = self.width
                     self._size += margin[0] + margin[2]
                     if screen.top is self:
-                        self.y += margin[0] - self.border_width[0]
+                        new_y += margin[0] - self.border_width[0]
                     else:
-                        self.y -= margin[2] + self.border_width[2]
+                        new_y -= margin[2] + self.border_width[2]
 
                 else:
-                    self.y += margin[0] - self.border_width[0]
-                    self.height -= margin[0] + margin[2]
+                    new_y += margin[0] - self.border_width[0]
+                    new_height -= margin[0] + margin[2]
                     self._length = self.height
                     self._size += margin[1] + margin[3]
                     if screen.left is self:
-                        self.x += margin[3] - self.border_width[3]
+                        new_x += margin[3] - self.border_width[3]
                     else:
-                        self.x -= margin[1] + self.border_width[1]
+                        new_x -= margin[1] + self.border_width[1]
 
             if screen.bottom is self and not self.reserve:
-                self.y -= self.height + self.margin[2]
+                new_y -= new_height + self.margin[2]
             elif screen.right is self and not self.reserve:
-                self.x -= self.width + self.margin[1]
+                new_x -= new_width + self.margin[1]
 
             self._reserved_space_updated = False
 
-        width = self.width + (self.border_width[1] + self.border_width[3])
-        height = self.height + (self.border_width[0] + self.border_width[2])
+        new_width = new_width + (self.border_width[1] + self.border_width[3])
+        new_height = new_height + (self.border_width[0] + self.border_width[2])
 
         if self.window:
             # We get _configure()-ed with an existing window when screens are getting
             # reconfigured but this screen is present both before and after
-            self.window.place(self.x, self.y, width, height, 0, None)
+            self.window.place(new_x, new_y, new_width, new_height, 0, None)
 
         else:
             # Whereas we won't have a window if we're startup up for the first time or
@@ -306,11 +310,11 @@ class Bar(Gap, configurable.Configurable, CommandObject):
                 )
 
                 self.window = qtile.core.create_internal(  # type: ignore [call-arg]
-                    self.x, self.y, width, height, depth
+                    new_x, new_y, new_width, new_height, depth
                 )
 
             else:
-                self.window = qtile.core.create_internal(self.x, self.y, width, height)
+                self.window = qtile.core.create_internal(new_x, new_y, new_width, new_height)
 
             self.window.opacity = self.opacity
             self.window.unhide()
@@ -324,10 +328,10 @@ class Bar(Gap, configurable.Configurable, CommandObject):
             self.window.process_key_press = self.process_key_press
 
         if hasattr(self, "drawer"):
-            self.drawer.width = width
-            self.drawer.height = height
+            self.drawer.width = new_width
+            self.drawer.height = new_height
         else:
-            self.drawer = self.window.create_drawer(width, height)
+            self.drawer = self.window.create_drawer(new_width, new_height)
         self.drawer.clear(self.background)
 
         crashed_widgets: set[_Widget] = set()

@@ -852,19 +852,11 @@ class _Window:
             client.
         """
 
-        # TODO: self.x/y/height/width are updated BEFORE
-        # place is called, so there's no way to know if only
-        # the position is changed, so we are sending
-        # the ConfigureNotify every time place is called
-        #
         # # if position change and size don't
         # # send a configure notify. See ICCCM 4.2.3
-        # send_notify = False
-        # if (self.x != x or self.y != y) and \
-        #    (self.width == width and self.height == height):
-        #       send_notify = True
-        # #for now, we just:
-        send_notify = True
+        send_notify = False
+        if (self.x != x or self.y != y) and (self.width == width and self.height == height):
+            send_notify = True
 
         # Adjust the placement to account for layout margins, if there are any.
         if margin is not None:
@@ -1602,30 +1594,34 @@ class Static(_Window, base.Static):
         self.conf_height = height
         x = x or self.x
         y = y or self.y
-        self.x = x + screen.x
-        self.y = y + screen.y
+        new_x = x + screen.x
+        new_y = y + screen.y
         self.screen = screen
-        self.place(self.x, self.y, width or self.width, height or self.height, 0, 0)
+        self.place(new_x, new_y, width or self.width, height or self.height, 0, 0)
         self.unhide()
         self.update_strut()
         self._grab_click()
 
     def handle_ConfigureRequest(self, e):  # noqa: N802
         cw = xcffib.xproto.ConfigWindow
+        new_x = self.x
+        new_y = self.y
+        new_width = self.width
+        new_height = self.height
         if self.conf_x is None and e.value_mask & cw.X:
-            self.x = e.x
+            new_x = e.x
         if self.conf_y is None and e.value_mask & cw.Y:
-            self.y = e.y
+            new_y = e.y
         if self.conf_width is None and e.value_mask & cw.Width:
-            self.width = e.width
+            new_width = e.width
         if self.conf_height is None and e.value_mask & cw.Height:
-            self.height = e.height
+            new_height = e.height
 
         self.place(
-            self.x,
-            self.y,
-            self.width,
-            self.height,
+            new_x,
+            new_y,
+            new_width,
+            new_height,
             self.borderwidth,
             self.bordercolor,
         )
