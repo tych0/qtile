@@ -5,6 +5,7 @@ Defining them here rather than in conftest.py avoids issues with circular import
 between test/conftest.py and test/backend/<backend>/conftest.py files.
 """
 
+import fcntl
 import functools
 import logging
 import multiprocessing
@@ -30,6 +31,8 @@ WIDTH = 800
 HEIGHT = 600
 SECOND_WIDTH = 640
 SECOND_HEIGHT = 480
+
+LOG_PIPE_BUFFER_SIZE = 1024 * 1024
 
 max_sleep = 5.0
 sleep_time = 0.1
@@ -150,6 +153,7 @@ class TestManager:
         self.proc = None
         self.c = None
         self.testwindows = []
+        self.logspipe = None
 
     def __enter__(self):
         """Set up resources"""
@@ -162,7 +166,12 @@ class TestManager:
         self.terminate()
         self._sockfile.close()
 
+    def get_log_buffer(self):
+        """Returns any logs that have been written to qtile's log buffer up to this point."""
+        return os.read(self.logspipe, LOG_PIPE_BUFFER_SIZE).decode("utf-8")
+
     def start(self, config_class, no_spawn=False, state=None):
+        readlogs, writelogs = os.pipe()
         rpipe, wpipe = multiprocessing.Pipe()
 
         def run_qtile():
@@ -171,9 +180,19 @@ class TestManager:
                 os.environ.pop("WAYLAND_DISPLAY", None)
                 kore = self.backend.create()
                 os.environ.update(self.backend.env)
+
                 init_log(self.log_level)
-                if hasattr(self, "log_queue"):
-                    logger.addHandler(logging.handlers.QueueHandler(self.log_queue))
+                os.close(readlogs)
+                formatter = logging.Formatter("%(levelname)s - %(message)s")
+                handler = logging.StreamHandler(os.fdopen(writelogs, "w"))
+                handler.setFormatter(formatter)
+                # default pipe size on linux is 64k. we probably won't write
+                # 64k of logs, but in the event that we do, here's a 1M buffer.
+                # this matters because only a handful of tests actually read
+                # this data, and the rest will hang if this buffer fills up.
+                fcntl.fcntl(writelogs, fcntl.F_SETPIPE_SZ, 1024 * 1024)
+                logger.addHandler(handler)
+
                 Qtile(
                     kore,
                     config_class(),
@@ -186,6 +205,7 @@ class TestManager:
 
         self.proc = multiprocessing.Process(target=run_qtile)
         self.proc.start()
+        self.logspipe = readlogs
 
         # First, wait for socket to appear
         if can_connect_qtile(self.sockfile, ok=lambda: not rpipe.poll()):
