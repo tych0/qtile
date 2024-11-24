@@ -1025,6 +1025,14 @@ class _Window:
         if self.wid not in stack or len(stack) < 2:
             return
 
+        # need to ignore OverrideRedirect windows here, the application will
+        # manage their stacking
+        def is_override_redirect(wid):
+            attrs = self.qtile.core.conn.GetWindowAttributes(wid).reply()
+            return attrs.override_redirect
+
+        stack = list(filter(is_override_redirect, stack))
+
         # Get all windows for the group and add Static windows to ensure these are included
         # in the stacking
         group_windows = group.windows.copy()
