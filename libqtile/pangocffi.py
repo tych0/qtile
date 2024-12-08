@@ -185,5 +185,6 @@ def parse_markup(value, accel_marker=0):
 
 
 def markup_escape_text(text):
-    ret = gobject.g_markup_escape_text(text.encode("utf-8"), -1)
-    return ffi.string(ret).decode()
+    from xml.sax.saxutils import escape
+
+    return escape(text)
