@@ -28,8 +28,6 @@ from libqtile.log_utils import logger
 from libqtile.utils import create_task
 from libqtile.widget.volume import Volume
 
-lock = asyncio.Lock()
-
 
 class PulseConnection:
     """
@@ -47,10 +45,11 @@ class PulseConnection:
         self.callbacks = []
         self.qtile = qtile
         self.timer = None
+        self.lock = asyncio.Lock()
 
     async def _configure(self):
         # Use a lock to prevent multiple connection attempts
-        async with lock:
+        async with self.lock:
             if self.configured:
                 return
 
@@ -79,7 +78,7 @@ class PulseConnection:
                 await self.pulse.connect()
                 logger.debug("Connection to pulseaudio ready")
             except PulseError:
-                logger.warning("Failed to connect to pulseaudio, retrying in 10s")
+                logger.exception("Failed to connect to pulseaudio, retrying in 10s")
             else:
                 # We're connected so get details of the default sink
                 await self.get_server_info()
