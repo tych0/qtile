@@ -341,6 +341,7 @@ class Drawer:
             sizelayout.text = i
             widths.append(sizelayout.width)
             heights.append(sizelayout.height)
+        sizelayout.finalize()
         return max(widths), max(heights)
 
     def text_extents(self, text):
