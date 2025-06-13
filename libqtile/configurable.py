@@ -26,7 +26,7 @@ class Configurable:
 
     def __init__(self, **config):
         self._variable_defaults = {}
-        self._user_config = config
+        self._user_config: dict = config
 
     def add_defaults(self, defaults):
         """Add defaults to this object, overwriting any which already exist"""
@@ -56,6 +56,38 @@ class Configurable:
             return (True, defaults[name])
         else:
             return (False, None)
+
+    def validate_user_config(self) -> None:
+        """
+        The goal here is to validate the user's config: e.g. if they passed a
+        string where a boolean is required, that is probably a bug. Since we
+        haven't required types for defaults in widgets historically, we try to
+        guess by using the type of the default. If the type is None, we can't
+        guess, so we just skip it.
+
+        Maybe someday someone will have the patience to go through and annotate
+        all the widget types, but for now hopefully this will catch more simple
+        user mistakes.
+        """
+        defaults = self._variable_defaults.copy()
+        defaults.update(self.global_defaults)
+
+        # avoid circular imports... probably we should move ConfigError here?
+        from libqtile.confreader import ConfigError
+
+        for k, v in self._user_config.items():
+            if k not in defaults:
+                raise ConfigError(f"{self.__class__.__name__} has no config option {k}")
+            default = defaults[k]
+            if default is None:
+                continue
+
+            tv = type(v)
+            td = type(default)
+            if tv != td:
+                raise ConfigError(
+                    f"{self.__class__.__name__} config option {k}={v} is the wrong type, got {tv.__name__} expected {td.__name__}"
+                )
 
 
 class ExtraFallback:

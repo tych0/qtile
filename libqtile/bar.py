@@ -768,5 +768,10 @@ class Bar(Gap, configurable.Configurable, CommandObject):
                 # Bar is not reserving screen space so let's keep above other windows
                 self.window.keep_above(enable=True)
 
+    def validate_user_config(self) -> None:
+        configurable.Configurable.validate_user_config(self)
+        for w in self.widgets:
+            w.validate_user_config()
+
 
 BarType = Bar | Gap

@@ -157,6 +157,7 @@ class _Widget(CommandObject, configurable.Configurable):
         self.name = self.__class__.__name__.lower()
         if "name" in config:
             self.name = config["name"]
+            del config["name"]
 
         configurable.Configurable.__init__(self, **config)
         self.add_defaults(_Widget.defaults)

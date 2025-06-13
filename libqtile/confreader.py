@@ -35,6 +35,8 @@ if TYPE_CHECKING:
     from libqtile.config import Group, Key, Mouse, Rule, Screen
     from libqtile.layout.base import Layout
 
+from libqtile.config import Bar
+
 
 class ConfigError(Exception):
     pass
@@ -137,9 +139,16 @@ class Config:
         self.update(**vars(config))
 
     def validate(self) -> None:
-        """
-        Validate the configuration against the X11 core, if it makes sense.
-        """
+        for screen in self.screens:
+            for gap in screen.gaps:
+                if isinstance(gap, Bar):
+                    gap.validate_user_config()
+
+        for l in self.layouts:
+            l.validate_user_config()
+
+        # below here is just x11 validation, so ignore it if this is wayland.
+        # we should probably make this backend specific somehow.
         try:
             from libqtile.backend.x11 import core
         except ImportError:

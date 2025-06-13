@@ -125,3 +125,33 @@ def test_extra_files_are_ok():
         with open(os.path.join(tempdir, "bar.py"), "w") as config:
             config.write("foo = 42")
         assert run_qtile_check(config_file)
+
+
+def test_check_bad_widget_arg():
+    assert not check_literal_config(
+        """
+    from libqtile.config import Bar, Screen
+    from libqtile.widget import TextBox
+    screens = Screen(top=Bar([TextBox(font=2)]))
+    """
+    )
+
+
+def test_check_ok_none_arg():
+    assert not check_literal_config(
+        """
+    from libqtile.config import Bar, Screen
+    from libqtile.widget import TextBox
+    screens = Screen(top=Bar([TextBox(fontshadow=2)]))
+    """
+    )
+
+
+def test_check_ok_typed_arg():
+    assert not check_literal_config(
+        """
+    from libqtile.config import Bar, Screen
+    from libqtile.widget import TextBox
+    screens = Screen(top=Bar([TextBox(font="sans")]))
+    """
+    )

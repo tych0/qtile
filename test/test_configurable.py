@@ -18,7 +18,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from libqtile import configurable
+import pytest
+
+from libqtile import configurable, confreader
 
 
 class ConfigurableWithFallback(configurable.Configurable):
@@ -71,3 +73,22 @@ def test_dont_use_fallback_if_set():
     c.bar = 3
     assert c.foo == 1
     assert c.bar == 3
+
+
+def test_configurable_validate_none_accepts_anything():
+    foo = configurable.Configurable(foo="bar")
+    foo.add_defaults([("foo", None, "foo")])
+    foo.validate_user_config()
+
+
+def test_configurable_validate_good_types_ok():
+    foo = configurable.Configurable(foo="bar")
+    foo.add_defaults([("foo", "foo", "foo")])
+    foo.validate_user_config()
+
+
+def test_configurable_validate_bad_types_fails():
+    foo = configurable.Configurable(foo=5)
+    foo.add_defaults([("foo", "foo", "foo")])
+    with pytest.raises(confreader.ConfigError):
+        foo.validate_user_config()
