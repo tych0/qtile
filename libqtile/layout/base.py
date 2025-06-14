@@ -47,8 +47,9 @@ class Layout(CommandObject, configurable.Configurable, metaclass=ABCMeta):
         # name is a little odd; we can't resolve it until the class is defined
         # (i.e., we can't figure it out to define it in Layout.defaults), so
         # we resolve it here instead.
-        if "name" not in config:
-            config["name"] = self.__class__.__name__.lower()
+        self.name = self.__class__.__name__.lower()
+        if "name" in config:
+            self.name = config["name"]
 
         CommandObject.__init__(self)
         configurable.Configurable.__init__(self, **config)
