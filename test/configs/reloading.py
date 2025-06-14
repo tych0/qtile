@@ -18,7 +18,7 @@ keys = [
 groups = [Group(i) for i in "12345"]
 
 layouts = [
-    layout.Columns(border_focus_stack=["#d75f5f", "#8f3d3d"], border_width=4),
+    layout.Columns(border_focus_stack="#d75f5f", border_width=4),
 ]
 
 screens = [
