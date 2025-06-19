@@ -395,22 +395,22 @@ def lift_args(cmd, args, kwargs):
 class IPCCommandServer:
     """Execute the object commands for the calls that are sent to it"""
 
-    def __init__(self, qtile) -> None:
+    def __init__(self) -> None:
         """Wrapper around the ipc server for communitacing with the IPCCommandInterface
 
         sets up the IPC server such that it will receive and send messages to
         and from the IPCCommandInterface.
         """
-        self.qtile = qtile
 
     def call(
         self,
+        qtile,
         data: tuple[list[SelectorType], str, tuple, dict, bool],
     ) -> tuple[int, Any]:
         """Receive and parse the given data"""
         selectors, name, args, kwargs, lifted = data
         try:
-            obj = self.qtile.select(selectors)
+            obj = qtile.select(selectors)
             cmd = obj.command(name)
         except SelectError as err:
             sel_string = format_selectors(selectors)

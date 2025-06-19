@@ -39,7 +39,7 @@ from libqtile.command.graph import (
     CommandGraphRoot,
 )
 from libqtile.command.interface import CommandInterface, IPCCommandInterface
-from libqtile.ipc import Client, find_sockfile
+from libqtile.ipc import Client, MessageType, find_sockfile
 
 if TYPE_CHECKING:
     from typing import Any
@@ -74,7 +74,7 @@ class CommandClient:
             specified, the command graph root is used.
         """
         if command is None:
-            command = IPCCommandInterface(Client(find_sockfile()))
+            command = IPCCommandInterface(Client(find_sockfile(), MessageType.Command))
         self._command = command
         self._current_node = current_node if current_node is not None else CommandGraphRoot()
 
@@ -187,7 +187,7 @@ class InteractiveCommandClient:
             specified, the command graph root is used.
         """
         if command is None:
-            command = IPCCommandInterface(Client(find_sockfile()))
+            command = IPCCommandInterface(Client(find_sockfile(), MessageType.Command))
         self._command = command
         self._current_node = current_node if current_node is not None else CommandGraphRoot()
 

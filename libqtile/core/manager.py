@@ -108,7 +108,7 @@ class Qtile(CommandObject):
 
         self._stopped_event: asyncio.Event | None = None
 
-        self.server = IPCCommandServer(self)
+        self.command_server = IPCCommandServer()
 
     def load_config(self, initial: bool = False) -> None:
         try:
@@ -246,6 +246,14 @@ class Qtile(CommandObject):
         finally:
             self.finalize()
             self.core.remove_listener()
+
+    def ipc_callback(self, message_type: ipc.MessageType, msg: Any):
+        """
+        Start the task for handling this IPC connection.
+        """
+        match message_type:
+            case MessageType.Command:
+                create_task(
 
     def stop(self, exitcode: int = 0) -> None:
         hook.fire("shutdown")
@@ -478,8 +486,8 @@ class Qtile(CommandObject):
             executed = False
             for cmd in key.commands:
                 if cmd.check(self):
-                    status, val = self.server.call(
-                        (cmd.selectors, cmd.name, cmd.args, cmd.kwargs, False)
+                    status, val = self.command_server.call(
+                        self, (cmd.selectors, cmd.name, cmd.args, cmd.kwargs, False)
                     )
                     if status in (interface.ERROR, interface.EXCEPTION):
                         logger.error("KB command error %s: %s", cmd.name, val)
@@ -839,8 +847,8 @@ class Qtile(CommandObject):
                     self._focus_hovered_window()
                 for i in m.commands:
                     if i.check(self):
-                        status, val = self.server.call(
-                            (i.selectors, i.name, i.args, i.kwargs, False)
+                        status, val = self.command_server.call(
+                            self, (i.selectors, i.name, i.args, i.kwargs, False)
                         )
                         if status in (interface.ERROR, interface.EXCEPTION):
                             logger.error("Mouse command error %s: %s", i.name, val)
@@ -852,7 +860,9 @@ class Qtile(CommandObject):
                     self._focus_hovered_window()
                 if m.start:
                     i = m.start
-                    status, val = self.server.call((i.selectors, i.name, i.args, i.kwargs, False))
+                    status, val = self.command_server.call(
+                        self, (i.selectors, i.name, i.args, i.kwargs, False)
+                    )
                     if status in (interface.ERROR, interface.EXCEPTION):
                         logger.error("Mouse command error %s: %s", i.name, val)
                         continue
@@ -890,8 +900,8 @@ class Qtile(CommandObject):
         if dx or dy:
             for i in cmd:
                 if i.check(self):
-                    status, val = self.server.call(
-                        (i.selectors, i.name, i.args + (rx + dx, ry + dy), i.kwargs, False)
+                    status, val = self.command_server.call(
+                        self, (i.selectors, i.name, i.args + (rx + dx, ry + dy), i.kwargs, False)
                     )
                     if status in (interface.ERROR, interface.EXCEPTION):
                         logger.error("Mouse command error %s: %s", i.name, val)

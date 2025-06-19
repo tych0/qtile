@@ -35,7 +35,7 @@ def run_cmd(opts) -> None:
         socket = ipc.find_sockfile()
     else:
         socket = opts.socket
-    client = ipc.Client(socket)
+    client = ipc.Client(socket, ipc.MessageType.Command)
     root = graph.CommandGraphRoot()
 
     cmd = [opts.cmd]
