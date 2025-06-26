@@ -108,7 +108,7 @@ class Client:
 
     def __exit__(self):
         self.writer.close()
-        await self.writer.wait_closed()
+        asyncio.run(self.writer.wait_closed())
 
     def send(self, msg: Any) -> Any:
         """Send the message and return the response from the server

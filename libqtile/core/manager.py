@@ -108,7 +108,7 @@ class Qtile(CommandObject):
 
         self._stopped_event: asyncio.Event | None = None
 
-        self.command_server = IPCCommandServer()
+        self.command_endpoint = IPCCommandServer()
 
     def load_config(self, initial: bool = False) -> None:
         try:
@@ -239,7 +239,7 @@ class Qtile(CommandObject):
                 LoopContext(signals),
                 ipc.Server(
                     self._prepare_socket_path(self.socket_path),
-                    self.server.call,
+                    self.ipc_callback,
                 ),
             ):
                 await self._stopped_event.wait()
@@ -247,13 +247,13 @@ class Qtile(CommandObject):
             self.finalize()
             self.core.remove_listener()
 
-    def ipc_callback(self, message_type: ipc.MessageType, msg: Any):
+    def ipc_callback(self, message_type: ipc.MessageType, msg: Any) -> None:
         """
-        Start the task for handling this IPC connection.
+        Handle an individual IPC message of a certain type.
         """
         match message_type:
-            case MessageType.Command:
-                create_task(
+            case ipc.MessageType.Command:
+                self.command_endpoint.call(self, msg)
 
     def stop(self, exitcode: int = 0) -> None:
         hook.fire("shutdown")
@@ -486,7 +486,7 @@ class Qtile(CommandObject):
             executed = False
             for cmd in key.commands:
                 if cmd.check(self):
-                    status, val = self.command_server.call(
+                    status, val = self.command_endpoint.call(
                         self, (cmd.selectors, cmd.name, cmd.args, cmd.kwargs, False)
                     )
                     if status in (interface.ERROR, interface.EXCEPTION):
@@ -847,7 +847,7 @@ class Qtile(CommandObject):
                     self._focus_hovered_window()
                 for i in m.commands:
                     if i.check(self):
-                        status, val = self.command_server.call(
+                        status, val = self.command_endpoint.call(
                             self, (i.selectors, i.name, i.args, i.kwargs, False)
                         )
                         if status in (interface.ERROR, interface.EXCEPTION):
@@ -860,7 +860,7 @@ class Qtile(CommandObject):
                     self._focus_hovered_window()
                 if m.start:
                     i = m.start
-                    status, val = self.command_server.call(
+                    status, val = self.command_endpoint.call(
                         self, (i.selectors, i.name, i.args, i.kwargs, False)
                     )
                     if status in (interface.ERROR, interface.EXCEPTION):
@@ -900,7 +900,7 @@ class Qtile(CommandObject):
         if dx or dy:
             for i in cmd:
                 if i.check(self):
-                    status, val = self.command_server.call(
+                    status, val = self.command_endpoint.call(
                         self, (i.selectors, i.name, i.args + (rx + dx, ry + dy), i.kwargs, False)
                     )
                     if status in (interface.ERROR, interface.EXCEPTION):
