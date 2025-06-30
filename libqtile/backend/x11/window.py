@@ -308,6 +308,8 @@ class XWindow:
         """
         Arguments can be: x, y, width, height, borderwidth, sibling, stackmode
         """
+        if "stackmode" in kwargs and self.window.get_attributes.get("override_redirect", False):
+            del kwargs["stackmode"]
         mask, values = xcbq.ConfigureMasks(**kwargs)
         # older versions of xcb pack everything into unsigned ints "=I"
         # since 1.12, uses switches to pack things sensibly
