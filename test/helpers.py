@@ -122,7 +122,7 @@ class Backend(metaclass=ABCMeta):
         """Get a list of all windows in ascending order of Z position"""
 
 
-@Retry(ignore_exceptions=(ipc.IPCError,), return_on_fail=True)
+@Retry(ignore_exceptions=(ipc.IPCError,), return_on_fail=True, tmax=10)
 def can_connect_qtile(socket_path, *, ok=None):
     if ok is not None and not ok():
         raise AssertionError()

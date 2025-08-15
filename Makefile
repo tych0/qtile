@@ -25,7 +25,7 @@ help: ## Show this help
 check: ## Run the test suite on the latest python
 	uv sync $(UV_PYTHON_ARG) --all-extras
 	uv run ./libqtile/backend/wayland/cffi/build.py
-	uv run $(UV_PYTHON_ARG) $(TEST_RUNNER) $(PYTEST_BACKEND_ARG)
+	uv run $(UV_PYTHON_ARG) $(TEST_RUNNER) $(PYTEST_BACKEND_ARG) -n=2 --random-order-bucket=global
 
 .PHONY: check-packaging
 check-packaging:  ## Check that the packaging is sane

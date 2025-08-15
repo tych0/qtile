@@ -19,6 +19,8 @@ dependencies = [
     "cffi >= 1.1.0",
     "xcffib >= 1.4.0",
     "pycairo >= 1.25.1",
+    "pytest-xdist>=3.8.0",
+    "pytest-random-order>=1.2.0",
 ]
 license = "MIT"
 license-files = [ "LICENSE" ]
