@@ -191,6 +191,7 @@ class Qtile(CommandObject):
         self._state = None
         self.update_desktops()
         hook.subscribe.setgroup(self.update_desktops)
+        hook.subscribe.resume(self.force_update_widgets)
 
         # Start the sleep inhibitor process to listen to sleep signals
         # NB: the inhibitor will only connect to the dbus service if the
@@ -199,6 +200,21 @@ class Qtile(CommandObject):
 
         if initial:
             hook.fire("startup_complete")
+
+    def force_update_widgets(self) -> None:
+        """
+        Force all widgets to re-poll and re-draw after system resume.
+
+        This is called when the system wakes up from sleep/suspend and ensures that
+        widgets display current information rather than stale data from before sleep.
+        Only updates widgets when the systemd inhibitor is active.
+        """
+        for widget in self.widgets_map.values():
+            if hasattr(widget, "force_update"):
+                try:
+                    widget.force_update()
+                except Exception as e:
+                    logger.warning(f"Failed to force update widget '{widget.name}': {e}")
 
     def _prepare_socket_path(
         self,

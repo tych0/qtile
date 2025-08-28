@@ -1337,3 +1337,55 @@ def test_widget_duplicate_warnings(manager):
 
     # Check this message level was info
     assert all([r.startswith("INFO") for r in records])
+
+
+class ForceUpdateWidget:
+    """Test widget that counts force_update calls"""
+
+    def __init__(self, name):
+        from libqtile.widget.textbox import TextBox
+
+        class _ForceUpdateWidget(TextBox):
+            def __init__(self, name):
+                super().__init__(text=name, name=name)
+                self.force_update_count = 0
+
+            def force_update(self):
+                self.force_update_count += 1
+
+        self._widget = _ForceUpdateWidget(name)
+
+    def __getattr__(self, name):
+        return getattr(self._widget, name)
+
+
+def test_force_update_widgets(manager_nospawn):
+    """Test that force_update_widgets is called when resume hook is fired"""
+    from libqtile import bar, config
+    from libqtile.widget import TextBox
+
+    # Create custom widgets that track force_update calls
+    widget1 = ForceUpdateWidget("test_widget1")
+    widget2 = ForceUpdateWidget("test_widget2")
+    # Regular widget without force_update method
+    widget3 = TextBox(text="no force_update")
+
+    class ForceUpdateTestConfig(BareConfig):
+        screens = [config.Screen(top=bar.Bar([widget1, widget2, widget3], 20))]
+
+    manager_nospawn.start(ForceUpdateTestConfig)
+
+    # Fire the force_update_widgets method via manager
+    manager_nospawn.c.eval("self.force_update_widgets()")
+
+    # Get the force_update_count from the actual widgets in widgets_map
+    widget1_count = int(
+        manager_nospawn.c.eval('self.widgets_map["test_widget1"].force_update_count')[1]
+    )
+    widget2_count = int(
+        manager_nospawn.c.eval('self.widgets_map["test_widget2"].force_update_count')[1]
+    )
+
+    # Verify force_update was called on widgets that have the method
+    assert widget1_count == 1
+    assert widget2_count == 1
