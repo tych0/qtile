@@ -128,7 +128,6 @@ def test_screen_dim(manager):
     assert manager.c.group.info()["focus"] == "one"
 
 
-@pytest.mark.parametrize("xephyr", [{"xoffset": 0}], indirect=True)
 @manager_config
 def test_clone_dim(manager):
     manager.test_window("one")

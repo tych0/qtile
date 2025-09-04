@@ -20,6 +20,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import os
 
 import pytest
 
@@ -65,7 +66,7 @@ multimonitor = pytest.mark.parametrize("outputs", [1, 2], indirect=True)
 
 
 @pytest.fixture(scope="session")
-def xephyr(request, outputs):
+def x11_session(request, outputs):
     if "x11" not in request.config.option.backend:
         yield
         return
@@ -91,11 +92,11 @@ def wayland_session(request, outputs):
 
 
 @pytest.fixture(scope="function")
-def backend(request, backend_name, xephyr, wayland_session):
+def backend(request, backend_name, x11_session, wayland_session):
     if backend_name == "x11":
         from test.backend.x11.conftest import XBackend
 
-        yield XBackend({"DISPLAY": xephyr.display}, args=[xephyr.display])
+        yield XBackend(os.environ, args=[x11_session.display])
     elif backend_name == "wayland":
         from test.backend.wayland.conftest import WaylandBackend
 
