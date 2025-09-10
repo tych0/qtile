@@ -59,7 +59,8 @@ sudo apt-get install -y --no-install-recommends \
      xfonts-utils \
      xserver-xorg-dev \
      ninja-build \
-     meson
+     meson \
+     weston
 
 # Build wayland
 tarball="wayland-$WAYLAND.tar.xz"

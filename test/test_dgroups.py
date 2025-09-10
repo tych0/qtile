@@ -36,15 +36,7 @@ class DGroupsConfig(libqtile.confreader.Config):
     screens = []
 
 
-class DGroupsSpawnConfig(DGroupsConfig):
-    groups = [
-        libqtile.config.Group("a"),
-        libqtile.config.Group("b", spawn=["xterm"]),
-    ]
-
-
 dgroups_config = pytest.mark.parametrize("manager", [DGroupsConfig], indirect=True)
-dgroups_spawn_config = pytest.mark.parametrize("manager", [DGroupsSpawnConfig], indirect=True)
 
 
 @dgroups_config
@@ -91,12 +83,22 @@ def test_dgroup_nonpersist(manager):
     assert len(manager.c.get_groups()) == 2
 
 
-@dgroups_spawn_config
-def test_dgroup_spawn_in_group(manager):
-    @Retry(ignore_exceptions=(AssertionError,), tmax=10)
+def test_dgroup_spawn_in_group(manager_nospawn):
+    config = DGroupsConfig
+    command = "xterm"
+    if manager_nospawn.backend.name == "wayland":
+        command = "weston-flower"
+    config.groups = [
+        libqtile.config.Group("a"),
+        libqtile.config.Group("b", spawn=[command]),
+    ]
+
+    manager_nospawn.start(config)
+
+    @Retry(ignore_exceptions=(AssertionError,))
     def wait_for_window():
-        assert len(manager.c.windows()) > 0
+        assert len(manager_nospawn.c.windows()) > 0
 
     wait_for_window()
-    assert not manager.c.group["a"].info()["windows"]
-    assert manager.c.group["b"].info()["windows"]
+    assert not manager_nospawn.c.group["a"].info()["windows"]
+    assert manager_nospawn.c.group["b"].info()["windows"]
