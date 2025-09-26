@@ -90,7 +90,7 @@ def get_cairo_pattern(surface, width=None, height=None, theta=0.0):
 class _Descriptor:
     def __init__(self, name=None, default=None, **opts):
         self.name = name
-        self.under_name = "_" + name
+        self.under_name = "_" + (name or "")
         self.default = default
         for key, value in opts.items():
             setattr(self, key, value)
