@@ -47,6 +47,7 @@ import cairocffi.pixbuf
 import cairocffi.xcb
 import xcffib
 import xcffib.randr
+import xcffib.xfixes
 import xcffib.xinerama
 import xcffib.xproto
 from xcffib.xfixes import SelectionEventMask
