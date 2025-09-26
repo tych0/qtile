@@ -31,7 +31,7 @@
 # SOFTWARE.
 from __future__ import annotations
 
-import collections
+import collections.abc
 import math
 import typing
 
