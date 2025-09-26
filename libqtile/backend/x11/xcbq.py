@@ -280,6 +280,7 @@ class AtomCache:
     def insert(self, name=None, atom=None):
         assert name or atom
         if atom is None:
+            assert name is not None  # For type checker
             c = self.conn.conn.core.InternAtom(False, len(name), name)
             atom = c.reply().atom
         if name is None:
