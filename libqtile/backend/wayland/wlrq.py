@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 import cairocffi
+import cairocffi.pixbuf
 from pywayland.server import Listener
 from wlroots import ffi as wlr_ffi
 from wlroots import lib as wlr_lib
