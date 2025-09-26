@@ -43,4 +43,5 @@ def get_core(backend: str, *args: Any) -> Core:
     if backend not in CORES:
         raise QtileError(f"Backend {backend} does not exist")
 
-    return importlib.import_module(f"libqtile.backend.{backend}.core").Core(*args)
+    module = importlib.import_module(f"libqtile.backend.{backend}.core")
+    return module.Core(*args)  # type: ignore[attr-defined]
