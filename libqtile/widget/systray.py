@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import xcffib
+import xcffib.xproto
 from xcffib.xproto import ClientMessageData, ClientMessageEvent, EventMask, SetMode
 
 from libqtile import bar
