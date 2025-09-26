@@ -275,7 +275,6 @@ class Core(base.Core):
             if (
                 attrs
                 and attrs.map_state == xcffib.xproto.MapState.Unmapped
-                or attrs.override_redirect
             ):
                 continue
             if state and state[0] == window.WithdrawnState:
@@ -764,9 +763,6 @@ class Core(base.Core):
             attrs = xwin.get_attributes()
             internal = xwin.get_property("QTILE_INTERNAL")
         except (xcffib.xproto.WindowError, xcffib.xproto.AccessError):
-            return
-
-        if attrs and attrs.override_redirect:
             return
 
         win = self.qtile.windows_map.get(xwin.wid)

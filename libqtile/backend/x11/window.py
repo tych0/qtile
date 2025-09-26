@@ -574,6 +574,8 @@ class _Window:
         try:
             if "USPosition" in self.hints["flags"] or "PPosition" in self.hints["flags"]:
                 return True
+            attrs = self.window.get_attributes()
+            return attrs.override_redirect
         except KeyError:
             pass
         return False
