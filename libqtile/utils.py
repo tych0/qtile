@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import asyncio
+import asyncio.subprocess
 import glob
 import importlib
 import os
@@ -650,13 +651,13 @@ async def acall_process(command: str | list[str], shell: bool = False) -> str:
     if shell:
         if isinstance(command, list):
             command = " ".join(command)
-        p = await asyncio.subprocess.create_subprocess_shell(
+        p = await asyncio.create_subprocess_shell(
             command, stdin=stdin, stdout=stdout, stderr=stderr
         )
     else:
         if isinstance(command, str):
             command = [command]
-        p = await asyncio.subprocess.create_subprocess_exec(
+        p = await asyncio.create_subprocess_exec(
             *command, stdin=stdin, stdout=stdout, stderr=stderr
         )
 
