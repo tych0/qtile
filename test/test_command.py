@@ -193,7 +193,7 @@ def test_cmd_commands(manager):
 
 @server_config
 def test_cmd_eval_namespace(manager):
-    assert manager.c.eval("__name__") == (True, "libqtile.core.manager")
+    assert manager.c.eval("__name__") == "libqtile.core.manager"
 
 
 @server_config
