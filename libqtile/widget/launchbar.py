@@ -111,8 +111,8 @@ class LaunchBar(base._Widget):
     def setup_images(self):
         """Create image structures for each icon files."""
         if self.icon_size is None:
-            self._icon_size = self.bar.size - 4
-        self._icon_padding = (self.bar.size - self._icon_size) // 2
+            self.icon_size = self.bar.size - 4
+        self._icon_padding = (self.bar.size - self.icon_size) // 2
 
         for img_name, iconfile in self.icons_files.items():
             if iconfile is None or self.text_only:
@@ -148,7 +148,7 @@ class LaunchBar(base._Widget):
             input_width = img.width
             input_height = img.height
 
-            sp = input_height / (self._icon_size)
+            sp = input_height / self.icon_size
             width = int(input_width / sp)
 
             imgpat = cairocffi.SurfacePattern(img.surface)
