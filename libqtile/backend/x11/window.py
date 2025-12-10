@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import array
 import contextlib
 import inspect
 import traceback
@@ -2088,7 +2087,7 @@ class Window(_Window, base.Window):
         icon = self.window.get_property("_NET_WM_ICON", "CARDINAL")
         if not icon:
             return
-        icon = list(map(ord, icon.value))
+        icon = bytearray(map(ord, icon.value))
 
         icons = {}
         while True:
@@ -2106,14 +2105,13 @@ class Window(_Window, base.Window):
             next_pix = width * height * 4
             data = icon[:next_pix]
 
-            arr = array.array("B", data)
-            for i in range(0, len(arr), 4):
-                mult = arr[i + 3] / 255.0
-                arr[i + 0] = int(arr[i + 0] * mult)
-                arr[i + 1] = int(arr[i + 1] * mult)
-                arr[i + 2] = int(arr[i + 2] * mult)
+            for i in range(0, len(data), 4):
+                mult = data[i + 3] / 255.0
+                data[i + 0] = int(data[i + 0] * mult)
+                data[i + 1] = int(data[i + 1] * mult)
+                data[i + 2] = int(data[i + 2] * mult)
             icon = icon[next_pix:]
-            icons[f"{width}x{height}"] = arr
+            icons[f"{width}x{height}"] = data
         self.icons = icons
         hook.fire("net_wm_icon_change", self)
 
