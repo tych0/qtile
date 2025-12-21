@@ -109,6 +109,9 @@ typedef void (*on_screen_change_cb_t)(void *userdata);
 // Callback for when session lock status changes
 typedef void (*on_session_lock_cb_t)(bool locked, void *userdata);
 
+// Callback for when xwayland is ready
+typedef void (*on_xwayland_ready_cb_t)(void *userdata);
+
 // Forward declaration of output struct
 struct qw_output;
 
@@ -192,6 +195,7 @@ struct qw_server {
     on_input_device_added_cb_t on_input_device_added_cb;
     focus_current_window_cb_t focus_current_window_cb;
     on_session_lock_cb_t on_session_lock_cb;
+    on_xwayland_ready_cb_t on_xwayland_ready_cb;
     get_current_output_dims_cb_t get_current_output_dims_cb;
     add_idle_inhibitor_cb_t add_idle_inhibitor_cb;
     remove_idle_inhibitor_cb_t remove_idle_inhibitor_cb;

@@ -172,9 +172,12 @@ class Qtile(CommandObject):
         # startup hook once. Note that this needs to happen *after* the config
         # is loaded and we have subscribed reconfigure_screens() in case people
         # do xrandr style manipulation in this hook.
-        if not self.no_spawn:
+        #
+        # we only fire the hook for x11 here, since wayland needs to wait for
+        # xwayland to be up, and that is not necessarily done yet.
+        if not self.no_spawn and self.core.name == "x11":
             hook.fire("startup_once")
-            self.no_spawn = True
+        self.no_spawn = True
         hook.fire("startup")
 
         if self._state:

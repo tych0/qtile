@@ -214,6 +214,12 @@ def check_inhibited_cb(userdata: ffi.CData) -> bool:
     return core.check_inhibited()
 
 
+@ffi.def_extern()
+def on_xwayland_ready_cb(userdata: ffi.CData) -> None:
+    core = ffi.from_handle(userdata)
+    core.handle_xwayland_ready()
+
+
 def get_wlr_log_level() -> int:
     if logger.level <= logging.DEBUG:
         return lib.WLR_DEBUG
@@ -257,6 +263,7 @@ class Core(base.Core):
         self.qw.on_input_device_added_cb = lib.on_input_device_added_cb
         self.qw.focus_current_window_cb = lib.focus_current_window_cb
         self.qw.on_session_lock_cb = lib.on_session_lock_cb
+        self.qw.on_xwayland_ready_cb = lib.on_xwayland_ready_cb
         self.qw.get_current_output_dims_cb = lib.get_current_output_dims_cb
         self.qw.add_idle_inhibitor_cb = lib.add_idle_inhibitor_cb
         self.qw.remove_idle_inhibitor_cb = lib.remove_idle_inhibitor_cb
@@ -269,6 +276,14 @@ class Core(base.Core):
         self._locked = False
         self.inhibitor_manager = InhibitorManager(self)
         self._inhibited = False
+
+        # We don't want to run startup_once until xwayland is ready: if users
+        # have xwayland programs in their startup hook, it is possible those
+        # programs will fail if it's not ready. if xwayland is not available,
+        # consider it ready immediately.
+        self.xwayland_ready = xwayland_display_name_ptr == ffi.NULL
+        self.has_output = False
+        self.startup_once_fired = False
 
     def update_backend_log_level(self) -> None:
         """Update the wlr log level based on Qtile's log level."""
@@ -291,6 +306,10 @@ class Core(base.Core):
             inputs.configure_input_devices(self.qw, self.qtile.config.wl_input_rules)
 
         if initial:
+            # Check if we have at least one output
+            if len(self.qtile.screens) > 0:
+                self.has_output = True
+                self.fire_startup_once_if_ready()
             # This backend does not support restarting
             return
 
@@ -330,6 +349,19 @@ class Core(base.Core):
 
     def handle_screen_change(self) -> None:
         hook.fire("screen_change", None)
+
+    def handle_xwayland_ready(self) -> None:
+        logger.debug("Xwayland is ready")
+        self.xwayland_ready = True
+        self.fire_startup_once_if_ready()
+
+    def is_backend_ready(self) -> bool:
+        return self.xwayland_ready and self.has_output
+
+    def fire_startup_once_if_ready(self) -> None:
+        if self.is_backend_ready() and not self.startup_once_fired:
+            self.startup_once_fired = True
+            hook.fire("startup_once")
 
     def get_screen_for_output(self, output: ffi.CData) -> Screen:
         assert self.qtile is not None

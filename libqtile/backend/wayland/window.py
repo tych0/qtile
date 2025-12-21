@@ -978,6 +978,6 @@ class Static(Base, base.Static):
         """Return a dictionary of info."""
         info = base.Static.info(self)
         info["shell"] = (
-            ffi.string(self._ptr.shell).decode() if self._ptr.shell != ffi.NULL else "",
+            ffi.string(self._ptr.shell).decode() if self._ptr.shell != ffi.NULL else ""
         )
         return info

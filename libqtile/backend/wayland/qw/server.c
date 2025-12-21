@@ -475,6 +475,10 @@ static void qw_server_handle_xwayland_ready(struct wl_listener *listener, void *
     UNUSED(data);
     struct qw_server *server = wl_container_of(listener, server, xwayland_ready);
     qw_xwayland_atoms_init(server->xwayland, server->xwayland_atoms);
+
+    if (server->on_xwayland_ready_cb) {
+        server->on_xwayland_ready_cb(server->cb_data);
+    }
 }
 
 // Return the view at the given layout coordinates, if any.
