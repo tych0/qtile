@@ -1,4 +1,5 @@
 import copy
+from typing import Any
 
 
 class Configurable:
@@ -27,15 +28,18 @@ class Configurable:
             cname = self.__class__.__name__
             raise AttributeError(f"{cname} has no attribute: {name}")
 
-    def _find_default(self, name):
+    def _find_default(self, name) -> tuple[bool, Any]:
         """Returns a tuple (found, value)"""
-        defaults = self._variable_defaults.copy()
-        defaults.update(self.global_defaults)
-        defaults.update(self._user_config)
-        if name in defaults:
-            return (True, defaults[name])
-        else:
-            return (False, None)
+        if name in self._user_config:
+            return True, self._user_config[name]
+
+        if name in self.global_defaults:
+            return True, self.global_defaults[name]
+
+        if name in self._variable_defaults:
+            return True, self._variable_defaults[name]
+
+        return False, None
 
 
 class ExtraFallback:
