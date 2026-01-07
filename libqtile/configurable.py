@@ -18,7 +18,7 @@ class Configurable:
         self._variable_defaults.update((d[0], copy.copy(d[1])) for d in defaults)
 
     def __getattr__(self, name):
-        if name == "_variable_defaults":
+        if name in ("_variable_defaults", "_user_config"):
             raise AttributeError
         found, value = self._find_default(name)
         if found:

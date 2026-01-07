@@ -9,10 +9,8 @@ import asyncio
 import inspect
 import sys
 import traceback
-from functools import partial
 from typing import TYPE_CHECKING
 
-from libqtile.configurable import Configurable
 from libqtile.log_utils import logger
 from libqtile.utils import create_task
 
@@ -243,33 +241,6 @@ class CommandObject(metaclass=abc.ABCMeta):
 
         """
         return self._commands.get(name)
-
-    def __getattr__(self, name):
-        # We can use __getattr_ to handle deprecated calls to
-        # cmd_ but we need to stop this overriding Configurable's
-        # use of this method
-        if isinstance(self, Configurable):
-            try:
-                return Configurable.__getattr__(self, name)
-            except AttributeError:
-                pass
-
-        # It's not a Configurable attribute so let's check if it's
-        # a command call
-        if name.startswith("cmd_"):
-            cmd = name[4:]
-            if cmd in self.commands():
-                logger.warning(
-                    "Deprecation Warning: commands exposed via IPC no "
-                    "longer use the 'cmd_' prefix. "
-                    "Please replace '%s' with '%s' in your code.",
-                    name,
-                    cmd,
-                )
-                # This is not a bound method so we need to pass 'self'
-                return partial(self.command(cmd), self)
-
-        raise AttributeError(f"{self.__class__} has no attribute {name}")
 
     @expose_command()
     def commands(self) -> list[str]:
