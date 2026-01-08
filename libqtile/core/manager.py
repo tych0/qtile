@@ -1353,6 +1353,7 @@ class Qtile(CommandObject):
     def validate_config(self) -> None:
         try:
             self.config.load()
+            self.config.validate()
         except Exception as error:
             send_notification("Configuration check", str(error))
         else:
