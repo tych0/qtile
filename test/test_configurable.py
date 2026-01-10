@@ -74,3 +74,109 @@ def test_validate_multiple_invalid_keys():
     c = ConfigurableWithFallback(invalid1=1, invalid2=2)
     with pytest.raises(AttributeError, match="invalid1.*invalid2"):
         c.validate()
+
+
+def test_validator_function_valid():
+    """Test that validator functions are called with valid values"""
+
+    def validate_positive(value):
+        if value <= 0:
+            raise ValueError("Value must be positive")
+
+    class ConfigWithValidator(configurable.Configurable):
+        defaults = [
+            ("count", 5, "A positive number", validate_positive),
+        ]
+
+        def __init__(self, **config):
+            configurable.Configurable.__init__(self, **config)
+            self.add_defaults(ConfigWithValidator.defaults)
+
+    # Valid value should not raise
+    c = ConfigWithValidator(count=10)
+    c.validate()  # Should not raise or log errors
+
+
+def test_validator_function_invalid(caplog):
+    """Test that validator functions log errors for invalid values"""
+
+    def validate_positive(value):
+        if value <= 0:
+            raise ValueError("Value must be positive")
+
+    class ConfigWithValidator(configurable.Configurable):
+        defaults = [
+            ("count", 5, "A positive number", validate_positive),
+        ]
+
+        def __init__(self, **config):
+            configurable.Configurable.__init__(self, **config)
+            self.add_defaults(ConfigWithValidator.defaults)
+
+    c = ConfigWithValidator(count=-5)
+    c.validate()
+
+    # Check that error was logged
+    assert len(caplog.records) == 1
+    log_record = caplog.records[0]
+    assert log_record.levelname == "ERROR"
+    assert "ConfigWithValidator" in log_record.message
+    assert "count" in log_record.message
+    assert "-5" in log_record.message
+    assert "Value must be positive" in log_record.message
+
+
+def test_validator_function_none():
+    """Test that None as validator is handled correctly"""
+
+    class ConfigWithNoneValidator(configurable.Configurable):
+        defaults = [
+            ("foo", 5, "A parameter", None),  # Explicit None validator
+            ("bar", 10, "Another parameter"),  # No validator (3-tuple)
+        ]
+
+        def __init__(self, **config):
+            configurable.Configurable.__init__(self, **config)
+            self.add_defaults(ConfigWithNoneValidator.defaults)
+
+    # Should not raise errors with any values since no validators
+    c = ConfigWithNoneValidator(foo=-100, bar=-200)
+    c.validate()  # Should not raise or log errors
+
+
+def test_validator_function_multiple_params(caplog):
+    """Test validators on multiple parameters"""
+
+    def validate_positive(value):
+        if value <= 0:
+            raise ValueError("Must be positive")
+
+    def validate_range(value):
+        if not 0 <= value <= 100:
+            raise ValueError("Must be between 0 and 100")
+
+    class ConfigMultiValidator(configurable.Configurable):
+        defaults = [
+            ("width", 10, "Width", validate_positive),
+            ("height", 20, "Height", validate_positive),
+            ("opacity", 50, "Opacity percentage", validate_range),
+        ]
+
+        def __init__(self, **config):
+            configurable.Configurable.__init__(self, **config)
+            self.add_defaults(ConfigMultiValidator.defaults)
+
+    # Multiple invalid values
+    c = ConfigMultiValidator(width=-5, opacity=150)
+    c.validate()
+
+    # Should have 2 error logs
+    assert len(caplog.records) == 2
+    messages = [r.message for r in caplog.records]
+
+    # Check both errors are present
+    assert any("width" in msg and "-5" in msg and "Must be positive" in msg for msg in messages)
+    assert any(
+        "opacity" in msg and "150" in msg and "Must be between 0 and 100" in msg
+        for msg in messages
+    )

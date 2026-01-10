@@ -1,24 +1,37 @@
 import copy
 from typing import Any
 
+from libqtile.log_utils import logger
+
 
 class Configurable:
     global_defaults = {}  # type: dict
 
     def __init__(self, **config):
         self._variable_defaults = {}
+        self._validators = {}
         self._user_config = config
 
     def add_defaults(self, defaults):
-        """Add defaults to this object, overwriting any which already exist"""
+        """Add defaults to this object, overwriting any which already exist
+
+        Defaults can be tuples of (name, value, description) or
+        (name, value, description, validator_func) where validator_func
+        takes a value and raises ValueError if invalid.
+        """
         # Since we can't check for immutability reliably, shallow copy the
         # value. If a mutable value were set and it were changed in one place
         # it would affect all other instances, since this is typically called
         # on __init__
-        self._variable_defaults.update((d[0], copy.copy(d[1])) for d in defaults)
+        for d in defaults:
+            name, value = d[0], d[1]
+            self._variable_defaults[name] = copy.copy(value)
+            # If there's a 4th element, it's a validator function
+            if len(d) >= 4 and d[3] is not None:
+                self._validators[name] = d[3]
 
     def __getattr__(self, name):
-        if name in ("_variable_defaults", "_user_config"):
+        if name in ("_variable_defaults", "_user_config", "_validators"):
             raise AttributeError
         found, value = self._find_default(name)
         if found:
@@ -49,6 +62,18 @@ class Configurable:
             raise AttributeError(
                 f"{cname} has no configuration parameter(s): {', '.join(sorted(invalid_keys))}"
             )
+
+        # Validate user-supplied values using validator functions if present
+        cname = self.__class__.__name__
+        for param_name, param_value in self._user_config.items():
+            if param_name in self._validators:
+                validator = self._validators[param_name]
+                try:
+                    validator(param_value)
+                except ValueError as e:
+                    logger.error(
+                        f"{cname}: parameter '{param_name}' has invalid value {param_value!r}: {e}"
+                    )
 
 
 class ExtraFallback:

@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from libqtile.bar import Bar
 
-
 if TYPE_CHECKING:
     from types import FunctionType
     from typing import Any, Literal

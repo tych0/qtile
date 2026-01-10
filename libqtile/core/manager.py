@@ -115,7 +115,7 @@ class Qtile(CommandObject):
     def load_config(self, initial: bool = False) -> None:
         try:
             self.config.load()
-            self.config.validate()
+            self.config.validate(self.core.name)
         except Exception as e:
             logger.exception("Configuration error:")
             send_notification("Configuration error", str(e))
@@ -1353,7 +1353,7 @@ class Qtile(CommandObject):
     def validate_config(self) -> None:
         try:
             self.config.load()
-            self.config.validate()
+            self.config.validate(self.core.name)
         except Exception as error:
             send_notification("Configuration check", str(error))
         else:
