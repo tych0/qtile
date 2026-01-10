@@ -41,6 +41,15 @@ class Configurable:
 
         return False, None
 
+    def validate(self) -> None:
+        valid_keys = set(self.global_defaults.keys()) | set(self._variable_defaults.keys())
+        invalid_keys = set(self._user_config.keys()) - valid_keys
+        if invalid_keys:
+            cname = self.__class__.__name__
+            raise AttributeError(
+                f"{cname} has no configuration parameter(s): {', '.join(sorted(invalid_keys))}"
+            )
+
 
 class ExtraFallback:
     """Adds another layer of fallback to attributes

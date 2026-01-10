@@ -51,3 +51,26 @@ def test_dont_use_fallback_if_set():
     c.bar = 3
     assert c.foo == 1
     assert c.bar == 3
+
+
+def test_validate_valid_config():
+    c = ConfigurableWithFallback(foo=5)
+    c.validate()  # Should not raise
+
+
+def test_validate_invalid_config():
+    import pytest
+
+    c = ConfigurableWithFallback(invalid_key=10)
+    with pytest.raises(
+        AttributeError, match="ConfigurableWithFallback has no configuration parameter"
+    ):
+        c.validate()
+
+
+def test_validate_multiple_invalid_keys():
+    import pytest
+
+    c = ConfigurableWithFallback(invalid1=1, invalid2=2)
+    with pytest.raises(AttributeError, match="invalid1.*invalid2"):
+        c.validate()

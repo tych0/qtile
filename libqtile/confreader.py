@@ -5,6 +5,9 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from libqtile.bar import Bar
+
+
 if TYPE_CHECKING:
     from types import FunctionType
     from typing import Any, Literal
@@ -116,7 +119,7 @@ class Config:
 
         self.update(**vars(config))
 
-    def validate(self) -> None:
+    def validate_x11_keymap(self) -> None:
         """
         Validate the configuration against the X11 core, if it makes sense.
         """
@@ -140,3 +143,20 @@ class Config:
             for m in ms.modifiers:
                 if m.lower() not in valid_mods:
                     raise ConfigError(f"No such modifier: {m}")
+
+    def validate(self, backend: str) -> None:
+        if backend == "x11":
+            self.validate_x11_keymap()
+
+        for layout in self.layouts:
+            layout.validate()
+
+        if self.floating_layout:
+            self.floating_layout.validate()
+
+        for screen in self.screens:
+            for bar in [screen.top, screen.bottom, screen.left, screen.right]:
+                if isinstance(bar, Bar):
+                    bar.validate()
+                    for widget in bar.widgets:
+                        widget.validate()

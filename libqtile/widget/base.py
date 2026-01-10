@@ -110,6 +110,7 @@ class _Widget(CommandObject, configurable.Configurable):
     offsetx: int = 0
     offsety: int = 0
     defaults: list[tuple[str, Any, str]] = [
+        ("name", None, "Name of this widget."),
         ("background", None, "Widget background color"),
         (
             "mouse_callbacks",
