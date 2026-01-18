@@ -105,6 +105,7 @@ class Qtile(CommandObject):
         self.locked = False
         hook.subscribe.locked(self.lock)
         hook.subscribe.unlocked(self.unlock)
+        self.test_data = None
 
     def lock(self) -> None:
         self.locked = True
