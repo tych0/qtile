@@ -4,15 +4,18 @@ import codeop
 import contextlib
 import io
 import re
+import time
 import traceback
+import uuid
+from typing import Any
 
+from libqtile.ipc import MessageType
 from libqtile.log_utils import logger
-from libqtile.utils import create_task
 
 ATTR_MATCH = re.compile(r"([\w\.]+?)(?:\.([\w]*))?$")
-TERMINATOR = "___END___"
-COMPLETION_REQUEST = "___COMPLETE___::"
-REPL_PORT = 41414
+
+# Session timeout in seconds (clean up inactive sessions)
+SESSION_TIMEOUT = 3600  # 1 hour
 
 
 def mark_unavailable(func):
@@ -81,19 +84,19 @@ def get_completions(text, local_vars):
         return []
 
 
-class QtileREPLServer:
-    """
-    Provides a REPL interface to allow users to inspect qtile's internals via
-    a more intuitive/familiar interface compared to `qtile shell`.
-    """
+class REPLSession:
+    """A single REPL session with its own namespace and state."""
 
-    def __init__(self):
-        self.buffer = ""
-        self.compiler = codeop.Compile()
-        self.started = False
-        self.connections = set()
+    def __init__(self, session_id: str, locals_dict: dict[str, Any]):
+        self.session_id = session_id
+        self.locals = {**make_safer_env(), **locals_dict}
+        self.compiler = codeop.CommandCompiler()
+        self.last_active = time.time()
 
-    def evaluate_code(self, code):
+    def evaluate_code(self, code: str) -> str:
+        """Evaluate code and return the output."""
+        self.last_active = time.time()
+
         with io.StringIO() as stdout:
             # Capture any stdout and direct to a buffer
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stdout):
@@ -107,108 +110,128 @@ class QtileREPLServer:
                             print(repr(result))
                     except SyntaxError:
                         # Fallback to exec (for statements)
-                        exec(self.compiler(code), self.locals)
+                        compiled = self.compiler(code)
+                        if compiled is not None:
+                            exec(compiled, self.locals)
                 except Exception:
                     traceback.print_exc()
 
             return stdout.getvalue()
 
-    async def handle_client(self, reader, writer):
-        """Method for sending data to REPL client."""
-        q = self.locals.get("qtile", None)
-
-        async def send(message, end=True):
-            """Wrapper to send data to client."""
-            suffix = TERMINATOR if end else ""
-            writer.write(f"{message}{suffix}\n".encode())
-            await writer.drain()
-
-        await send("Connected to Qtile REPL\nPress Ctrl+C to exit.\n")
-
-        # Keep track of the number of connected clients so server is not
-        # stopped while there is still a client connected.
-        task = asyncio.current_task()
-        self.connections.add(task)
-
-        self.compiler = codeop.CommandCompiler()
-
-        while not reader.at_eof():
-            buffer = ""
-            # The client handles checking when a code block is complete and
-            # terminates the code with a marker. Server therefore just reads
-            # until it finds that marker.
-            while True:
-                line = await reader.readline()
-                if not line:
-                    break
-                line = line.decode()
-
-                if line.strip() == TERMINATOR:
-                    break
-
-                buffer += line
-
-            # Handle completion requests
-            if buffer.startswith(COMPLETION_REQUEST):
-                prefix = buffer.split("::", 1)[1]
-                matches = get_completions(prefix, self.locals)
-                output = ",".join(matches) + "\n"
-                await send(output)
-                continue
-
-            if not buffer.strip():
-                buffer = ""
-                await send("", end=False)
-                continue
-
-            # Ready to execute
-            output = ""
-
-            # Block interaction if session is locked
-            if q is not None and q.locked:
-                output = "Server is locked."
-            else:
-                # Evaluate code in a thread so blocking calls don't block the eventloop
-                loop = asyncio.get_running_loop()
-                output = await loop.run_in_executor(None, self.evaluate_code, buffer)
-
-            # Send output to client
-            await send(output.strip())
-
-        # Client has disconnected. Tidy up.
-        writer.close()
-        self.connections.remove(task)
-
-    async def start(self, locals_dict=dict()):
-        if self.started:
-            return
-
-        self.locals = {**make_safer_env(), **locals_dict}
-        self.server = await asyncio.start_server(self.handle_client, "localhost", REPL_PORT)
-        logger.info("Qtile REPL server running on localhost:%d", REPL_PORT)
-        self.started = True
-
-        # serve_forever() cannot be stopped except by putting it in a task and
-        # cancelling that task.
-        self.repl_task = create_task(self.server.serve_forever())
-
-        try:
-            await self.repl_task
-        except asyncio.CancelledError:
-            logger.info("Qtile REPL server has been stopped.")
-
-    async def stop(self):
-        if not self.started:
-            return
-
-        if self.connections:
-            logger.debug("Can't close with active connections")
-            return
-
-        self.server.close()
-        await self.server.wait_closed()
-        self.repl_task.cancel()
-        self.started = False
+    def get_completions(self, text: str) -> list[str]:
+        """Get completions for the given text."""
+        self.last_active = time.time()
+        return get_completions(text, self.locals)
 
 
-repl_server = QtileREPLServer()
+class REPLManager:
+    """Manages REPL sessions for the IPC server."""
+
+    def __init__(self):
+        self.sessions: dict[str, REPLSession] = {}
+        self.default_locals: dict[str, Any] = {}
+        self.enabled = False
+        self.qtile = None
+
+    def enable(self, qtile, locals_dict: dict[str, Any] | None = None) -> None:
+        """Enable the REPL functionality."""
+        self.qtile = qtile
+        self.default_locals = {"qtile": qtile}
+        if locals_dict:
+            self.default_locals.update(locals_dict)
+        self.enabled = True
+        logger.info("REPL functionality enabled")
+
+    def disable(self) -> None:
+        """Disable REPL functionality and clean up sessions."""
+        self.sessions.clear()
+        self.enabled = False
+        logger.info("REPL functionality disabled")
+
+    def cleanup_inactive_sessions(self) -> None:
+        """Remove sessions that have been inactive for too long."""
+        now = time.time()
+        expired = [
+            sid
+            for sid, session in self.sessions.items()
+            if now - session.last_active > SESSION_TIMEOUT
+        ]
+        for sid in expired:
+            del self.sessions[sid]
+            logger.debug("Cleaned up inactive REPL session: %s", sid)
+
+    def get_or_create_session(self, session_id: str | None = None) -> REPLSession:
+        """Get an existing session or create a new one."""
+        self.cleanup_inactive_sessions()
+
+        if session_id and session_id in self.sessions:
+            return self.sessions[session_id]
+
+        # Create new session
+        new_id = session_id or str(uuid.uuid4())
+        session = REPLSession(new_id, self.default_locals)
+        self.sessions[new_id] = session
+        logger.debug("Created new REPL session: %s", new_id)
+        return session
+
+    def remove_session(self, session_id: str) -> None:
+        """Remove a specific session."""
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            logger.debug("Removed REPL session: %s", session_id)
+
+    async def handle_message(
+        self, msg_type: MessageType, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handle REPL-related messages from the IPC server."""
+        if not self.enabled:
+            return {"error": "REPL not enabled. Run start_repl_server first."}
+
+        # Check if session is locked
+        if self.qtile is not None and self.qtile.locked:
+            return {"error": "Session is locked."}
+
+        if msg_type == MessageType.REPL_SESSION_START:
+            session = self.get_or_create_session()
+            return {
+                "session_id": session.session_id,
+                "message": "REPL session started. Press Ctrl+C to exit.",
+            }
+
+        if msg_type == MessageType.REPL_SESSION_END:
+            session_id = payload.get("session_id")
+            if session_id:
+                self.remove_session(session_id)
+            return {"success": True}
+
+        if msg_type == MessageType.REPL_EVAL:
+            code = payload.get("code", "")
+            session_id = payload.get("session_id")
+            session = self.get_or_create_session(session_id)
+
+            # Evaluate code in a thread so blocking calls don't block the eventloop
+            loop = asyncio.get_running_loop()
+            output = await loop.run_in_executor(None, session.evaluate_code, code)
+
+            return {
+                "session_id": session.session_id,
+                "output": output.strip(),
+            }
+
+        if msg_type == MessageType.REPL_COMPLETE:
+            text = payload.get("text", "")
+            session_id = payload.get("session_id")
+            session = self.get_or_create_session(session_id)
+
+            completions = session.get_completions(text)
+
+            return {
+                "session_id": session.session_id,
+                "completions": completions,
+            }
+
+        return {"error": f"Unknown REPL message type: {msg_type}"}
+
+
+# Global REPL manager instance
+repl_manager = REPLManager()

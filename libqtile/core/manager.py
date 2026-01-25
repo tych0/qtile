@@ -35,13 +35,12 @@ from libqtile.core.state import QtileState
 from libqtile.dgroups import DGroups
 from libqtile.extension.base import _Extension
 from libqtile.group import _Group
-from libqtile.interactive.repl import repl_server
+from libqtile.interactive.repl import repl_manager
 from libqtile.log_utils import logger
 from libqtile.resources.sleep import inhibitor
 from libqtile.scratchpad import ScratchPad
 from libqtile.scripts.main import VERSION
 from libqtile.utils import (
-    create_task,
     get_cache_dir,
     lget,
     remove_dbus_rules,
@@ -241,12 +240,13 @@ class Qtile(CommandObject):
                 # the XWayland X server has initialized (as a workaround). the
                 # x11 backend can just do it here.
                 signals[signal.SIGCHLD] = utils.reap_zombies
+            self._ipc_server = ipc.Server(
+                self._prepare_socket_path(self.socket_path),
+                self.server.call,
+            )
             async with (
                 LoopContext(signals),
-                ipc.Server(
-                    self._prepare_socket_path(self.socket_path),
-                    self.server.call,
-                ),
+                self._ipc_server,
             ):
                 await self._stopped_event.wait()
                 if lifecycle.behavior != lifecycle.behavior.RESTART:
@@ -1977,11 +1977,17 @@ class Qtile(CommandObject):
 
     @expose_command()
     def start_repl_server(self, locals_dict: dict[str, Any] = dict()) -> None:
-        """Start the REPL server."""
-        _locals = {"qtile": self, **locals_dict}
-        create_task(repl_server.start(locals_dict=_locals))
+        """Start the REPL server.
+
+        Enables REPL functionality on the IPC socket. Connect using `qtile repl`.
+        """
+        repl_manager.enable(self, locals_dict)
+        if hasattr(self, "_ipc_server"):
+            self._ipc_server.set_repl_handler(repl_manager.handle_message)
 
     @expose_command()
     def stop_repl_server(self) -> None:
         """Stop the REPL server."""
-        create_task(repl_server.stop())
+        repl_manager.disable()
+        if hasattr(self, "_ipc_server"):
+            self._ipc_server.set_repl_handler(None)

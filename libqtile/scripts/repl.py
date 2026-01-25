@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import codeop
 import re
-import socket
 import sys
-from time import sleep
 from typing import TYPE_CHECKING
 
 try:
@@ -18,13 +17,11 @@ try:
 except (ImportError, ModuleNotFoundError):
     HAS_PT = False
 
-from libqtile.interactive.repl import COMPLETION_REQUEST, REPL_PORT, TERMINATOR
+from libqtile.ipc import PersistentClient, find_sockfile
 from libqtile.scripts.cmd_obj import cmd_obj
 
 if TYPE_CHECKING:
     pass
-
-HOST = "localhost"
 
 
 class Command:
@@ -64,53 +61,19 @@ def is_code_complete(text: str) -> bool:
         return True
 
 
-def read_full_response(sock, end_marker=f"{TERMINATOR}\n"):
-    """Function to read data from socket until termination marker."""
-    buffer = ""
-    while True:
-        data = sock.recv(4096).decode()
+async def repl_session(socket_path: str) -> None:
+    """Run the REPL session using the new IPC protocol."""
+    async with PersistentClient(socket_path) as client:
+        # Start a REPL session
+        response = await client.start_repl_session()
+        session_id = response
+        print("Connected to Qtile REPL\nPress Ctrl+C to exit.\n")
 
-        if not data:
-            # connection closed without end marker
-            break
-
-        buffer += data
-        if end_marker in buffer:
-            # Split off the marker and return only the response text
-            response, _, _ = buffer.partition(end_marker)
-            return response
-
-    # connection closed without end marker
-    return buffer
-
-
-def start_repl(_args):
-    if not HAS_PT:
-        sys.exit("You need to install prompt_toolkit to use the REPL client.")
-
-    # Start the repl server in qtile and find port number
-    start_server()
-
-    # We need to wait until server is up an running before continuing
-    retry_count = 0
-    while retry_count < 5:
-        try:
-            sock = socket.create_connection((HOST, REPL_PORT))
-            break
-        except ConnectionRefusedError:
-            retry_count += 1
-            sleep(0.5)
-
-    if retry_count == 5:
-        print("Unable to connect to REPL server. Exiting...")
-        stop_server()
-        return
-
-    try:
-        # Create the objects needed for the client
-        class SocketCompleter(Completer):
-            def __init__(self, sock):
-                self.sock = sock
+        class IPCCompleter(Completer):
+            def __init__(self, client: PersistentClient, session_id: str):
+                self.client = client
+                self.session_id = session_id
+                self._loop = asyncio.get_event_loop()
 
             def get_completions(self, document, _complete_event):
                 text_before_cursor = document.text_before_cursor
@@ -123,23 +86,21 @@ def start_repl(_args):
                 word = match.group(1)
                 start_position = -len(word)
 
-                # Send only the word to the REPL server
-                self.sock.sendall(f"{COMPLETION_REQUEST}{word}\n{TERMINATOR}\n".encode())
-
-                # Read completions from server and filter out empty strings
-                data = read_full_response(self.sock)
-                options = list(filter(None, data.strip().split(",")))
-
-                # No suggestions so return early
-                if not options:
+                # Get completions from server
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.client.send_repl_complete(word, self.session_id),
+                        self._loop,
+                    )
+                    completions = future.result(timeout=5)
+                except Exception:
                     return
 
-                for opt in options:
-                    # opt is the full completion (e.g. 'qtile.current_layout')
+                for opt in completions:
                     yield Completion(opt, start_position=start_position)
 
         kb = KeyBindings()
-        completer = SocketCompleter(sock)
+        completer = IPCCompleter(client, session_id)
 
         # Create a session instance
         session = PromptSession(
@@ -151,6 +112,11 @@ def start_repl(_args):
             history=InMemoryHistory(),
         )
 
+        # Store client and session_id for the key handler
+        _client = client
+        _session_id = session_id
+        _loop = asyncio.get_event_loop()
+
         # Create a handler for the Enter key so we can deal with multiline input
         @kb.add("enter")
         def _(event):
@@ -158,34 +124,38 @@ def start_repl(_args):
             text = buffer.document.text
 
             if is_code_complete(text):
-                # Save input line to print after
-                full_block = f"{text}\n{TERMINATOR}\n"
-
                 # Submit to server
-                sock.sendall(full_block.encode())
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        _client.send_repl_eval(text, _session_id),
+                        _loop,
+                    )
+                    response = future.result(timeout=30)
+                except Exception as e:
+                    print(f"Error: {e}")
+                    buffer.reset()
+                    return
 
-                # Save our code to the history as `buffer.reset()`
-                # would otherwise prevent that from happening
+                # Save our code to the history
                 session.history.append_string(text)
 
-                # Clear buffer before reading response
+                # Clear buffer
                 buffer.reset()
 
-                # Read and print server response
-                response = read_full_response(sock)
-
                 # Echo input and response manually
-                text = text.replace("\n", "\n... ")
-                print(f">>> {text}")
-                if response.strip():
-                    print(response, end="\n", flush=True)
+                text_display = text.replace("\n", "\n... ")
+                print(f">>> {text_display}")
+
+                output = response.get("output", "")
+                error = response.get("error")
+                if error:
+                    print(f"Error: {error}")
+                elif output:
+                    print(output, end="\n", flush=True)
             else:
                 buffer.insert_text("\n")  # Insert a newline instead
 
         with patch_stdout():
-            # Read the welcome message from the server.
-            print(read_full_response(sock), end="", flush=True)
-
             while True:
                 try:
                     session.prompt(">>> ")
@@ -193,11 +163,37 @@ def start_repl(_args):
                     print("\nExiting.")
                     break
 
+        # End the REPL session
+        await client.end_repl_session(session_id)
+
+
+def start_repl(args) -> None:
+    if not HAS_PT:
+        sys.exit("You need to install prompt_toolkit to use the REPL client.")
+
+    # Start the repl server in qtile
+    start_server()
+
+    # Get socket path
+    if hasattr(args, "socket") and args.socket:
+        socket_path = args.socket
+    else:
+        socket_path = find_sockfile()
+
+    try:
+        asyncio.run(repl_session(socket_path))
     finally:
-        sock.close()
         stop_server()
 
 
 def add_subcommand(subparsers, parents):
     parser = subparsers.add_parser("repl", parents=parents, help="Run a qtile REPL session.")
+    parser.add_argument(
+        "-s",
+        "--socket",
+        action="store",
+        type=str,
+        default=None,
+        help="Use specified socket for IPC.",
+    )
     parser.set_defaults(func=start_repl)

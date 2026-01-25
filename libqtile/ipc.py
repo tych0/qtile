@@ -1,8 +1,13 @@
 """
-A simple IPC mechanism for communicating between two local processes. We
-use marshal to serialize data - this means that both client and server must
-run the same Python version, and that clients must be trusted (as
-un-marshalling untrusted data can result in arbitrary code execution).
+A simple IPC mechanism for communicating between two local processes.
+
+Uses a framed protocol with JSON serialization:
+- 1 byte protocol version
+- 1 byte message type
+- 4 bytes big-endian payload length
+- Variable length JSON payload
+
+Supports stateful connections with multiple messages per connection.
 """
 
 from __future__ import annotations
@@ -10,20 +15,43 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import json
-import marshal
 import os.path
 import socket
 import struct
+from enum import IntEnum
 from typing import Any
 
 from libqtile import hook
 from libqtile.log_utils import logger
 from libqtile.utils import get_cache_dir
 
-HDRFORMAT = "!L"
-HDRLEN = struct.calcsize(HDRFORMAT)
+# Protocol constants
+PROTOCOL_VERSION = 0x01
+HEADER_FORMAT = "!BBL"  # version (1 byte), type (1 byte), length (4 bytes big-endian)
+HEADER_LENGTH = struct.calcsize(HEADER_FORMAT)
 
 SOCKBASE = "qtilesocket.%s"
+
+
+class MessageType(IntEnum):
+    """Message types for the IPC protocol."""
+
+    # Command messages (existing functionality)
+    COMMAND = 0x01
+    COMMAND_RESPONSE = 0x02
+
+    # REPL messages
+    REPL_EVAL = 0x10
+    REPL_EVAL_RESPONSE = 0x11
+    REPL_COMPLETE = 0x12
+    REPL_COMPLETE_RESPONSE = 0x13
+    REPL_SESSION_START = 0x14
+    REPL_SESSION_END = 0x15
+
+    # Connection control
+    KEEPALIVE = 0xF0
+    KEEPALIVE_ACK = 0xF1
+    CLOSE = 0xFF
 
 
 class IPCError(Exception):
@@ -69,64 +97,86 @@ def find_sockfile(display: str | None = None):
     raise IPCError("Could not find socket file.")
 
 
-class _IPC:
-    """A helper class to handle properly packing and unpacking messages"""
+def _json_encoder(field: Any) -> Any:
+    """Convert non-serializable types to ones understood by stdlib json module"""
+    if isinstance(field, set):
+        return list(field)
+    raise ValueError(f"Tried to JSON serialize unsupported type {type(field)}: {field}")
 
-    @staticmethod
-    def unpack(data: bytes, *, is_json: bool | None = None) -> tuple[Any, bool]:
-        """Unpack the incoming message
 
-        Parameters
-        ----------
-        data: bytes
-            The incoming message to unpack
-        is_json: bool | None
-            If the message should be unpacked as json.  By default, try to
-            unpack json and fallback gracefully to marshalled bytes.
+def pack(msg: Any) -> bytes:
+    """Pack the object into a JSON message payload"""
+    json_obj = json.dumps(msg, default=_json_encoder)
+    return json_obj.encode()
 
-        Returns
-        -------
-        tuple[Any, bool]
-            A tuple of the unpacked object and a boolean denoting if the
-            message was deserialized using json.  If True, the return message
-            should be packed as json.
-        """
-        if is_json is None or is_json:
-            try:
-                return json.loads(data.decode()), True
-            except ValueError as e:
-                if is_json:
-                    raise IPCError("Unable to decode json data") from e
 
+def unpack(data: bytes) -> Any:
+    """Unpack a JSON message payload"""
+    try:
+        return json.loads(data.decode())
+    except (ValueError, UnicodeDecodeError) as e:
+        raise IPCError("Unable to decode message payload") from e
+
+
+def pack_message(msg_type: MessageType, payload: Any) -> bytes:
+    """Pack a complete message with header and JSON payload."""
+    payload_bytes = pack(payload)
+    header = struct.pack(HEADER_FORMAT, PROTOCOL_VERSION, msg_type, len(payload_bytes))
+    return header + payload_bytes
+
+
+async def read_message(reader: asyncio.StreamReader) -> tuple[MessageType, Any]:
+    """Read a framed message from the stream.
+
+    Returns:
+        tuple of (message_type, payload)
+
+    Raises:
+        IPCError: If the message cannot be read or decoded
+        asyncio.IncompleteReadError: If the connection is closed
+    """
+    try:
+        header = await reader.readexactly(HEADER_LENGTH)
+    except asyncio.IncompleteReadError as e:
+        if len(e.partial) == 0:
+            raise  # Connection closed cleanly
+        raise IPCError("Incomplete message header") from e
+
+    version, msg_type, length = struct.unpack(HEADER_FORMAT, header)
+
+    if version != PROTOCOL_VERSION:
+        raise IPCError(f"Unsupported protocol version: {version}")
+
+    try:
+        msg_type = MessageType(msg_type)
+    except ValueError as e:
+        raise IPCError(f"Unknown message type: {msg_type}") from e
+
+    if length > 0:
         try:
-            assert len(data) >= HDRLEN
-            size = struct.unpack(HDRFORMAT, data[:HDRLEN])[0]
-            assert size >= len(data[HDRLEN:])
-            return marshal.loads(data[HDRLEN : HDRLEN + size]), False
-        except AssertionError as e:
-            raise IPCError("error reading reply! (probably the socket was disconnected)") from e
+            payload_bytes = await reader.readexactly(length)
+        except asyncio.IncompleteReadError as e:
+            raise IPCError("Incomplete message payload") from e
+        payload = unpack(payload_bytes)
+    else:
+        payload = None
 
-    @staticmethod
-    def pack(msg: Any, *, is_json: bool = False) -> bytes:
-        """Pack the object into a message to pass"""
-        if is_json:
-            json_obj = json.dumps(msg, default=_IPC._json_encoder)
-            return json_obj.encode()
+    return msg_type, payload
 
-        msg_bytes = marshal.dumps(msg)
-        size = struct.pack(HDRFORMAT, len(msg_bytes))
-        return size + msg_bytes
 
-    @staticmethod
-    def _json_encoder(field: Any) -> Any:
-        """Convert non-serializable types to ones understood by stdlib json module"""
-        if isinstance(field, set):
-            return list(field)
-        raise ValueError(f"Tried to JSON serialize unsupported type {type(field)}: {field}")
+async def write_message(
+    writer: asyncio.StreamWriter, msg_type: MessageType, payload: Any
+) -> None:
+    """Write a framed message to the stream."""
+    message = pack_message(msg_type, payload)
+    writer.write(message)
+    await writer.drain()
 
 
 class Client:
-    def __init__(self, socket_path: str, is_json=False) -> None:
+    """Synchronous IPC client for single request/response exchanges."""
+
+    def __init__(self, socket_path: str) -> None:
         """Create a new IPC client
 
         Parameters
@@ -134,11 +184,8 @@ class Client:
         socket_path: str
             The file path to the file that is used to open the connection to
             the running IPC server.
-        is_json: bool
-            Pack and unpack messages as json
         """
         self.socket_path = socket_path
-        self.is_json = is_json
 
     def call(self, data: Any) -> Any:
         return self.send(data)
@@ -152,11 +199,7 @@ class Client:
         return asyncio.run(self.async_send(msg))
 
     async def async_send(self, msg: Any) -> Any:
-        """Send the message to the server
-
-        Connect to the server, then pack and send the message to the server,
-        then wait for and return the response from the server.
-        """
+        """Send a command message to the server and return the response."""
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_unix_connection(path=self.socket_path), timeout=3
@@ -165,28 +208,160 @@ class Client:
             raise IPCError(f"Could not open {self.socket_path}")
 
         try:
-            send_data = _IPC.pack(msg, is_json=self.is_json)
-            writer.write(send_data)
-            writer.write_eof()
+            await write_message(writer, MessageType.COMMAND, msg)
 
-            read_data = await asyncio.wait_for(reader.read(), timeout=10)
+            msg_type, response = await asyncio.wait_for(read_message(reader), timeout=10)
+
+            if msg_type != MessageType.COMMAND_RESPONSE:
+                raise IPCError(f"Unexpected response type: {msg_type}")
+
+            return response
         except asyncio.TimeoutError:
             raise IPCError("Server not responding")
         finally:
-            # see the note in Server._server_callback()
             writer.close()
             await writer.wait_closed()
 
-        data, _ = _IPC.unpack(read_data, is_json=self.is_json)
 
-        return data
+class PersistentClient:
+    """Async IPC client for stateful connections with multiple message exchanges."""
+
+    def __init__(self, socket_path: str) -> None:
+        """Create a new persistent IPC client.
+
+        Parameters
+        ----------
+        socket_path: str
+            The file path to the unix socket.
+        """
+        self.socket_path = socket_path
+        self.reader: asyncio.StreamReader | None = None
+        self.writer: asyncio.StreamWriter | None = None
+
+    async def connect(self) -> None:
+        """Establish a connection to the server."""
+        if self.writer is not None:
+            return  # Already connected
+
+        try:
+            self.reader, self.writer = await asyncio.wait_for(
+                asyncio.open_unix_connection(path=self.socket_path), timeout=3
+            )
+        except (ConnectionRefusedError, FileNotFoundError):
+            raise IPCError(f"Could not open {self.socket_path}")
+
+    async def close(self) -> None:
+        """Close the connection gracefully."""
+        if self.writer is None:
+            return
+
+        try:
+            await write_message(self.writer, MessageType.CLOSE, None)
+        except Exception:
+            pass  # Best effort
+
+        self.writer.close()
+        await self.writer.wait_closed()
+        self.reader = None
+        self.writer = None
+
+    async def send_command(self, msg: Any) -> Any:
+        """Send a command and receive the response."""
+        if self.writer is None or self.reader is None:
+            raise IPCError("Not connected")
+
+        await write_message(self.writer, MessageType.COMMAND, msg)
+
+        msg_type, response = await asyncio.wait_for(read_message(self.reader), timeout=10)
+
+        if msg_type != MessageType.COMMAND_RESPONSE:
+            raise IPCError(f"Unexpected response type: {msg_type}")
+
+        return response
+
+    async def send_repl_eval(self, code: str, session_id: str | None = None) -> Any:
+        """Send REPL code for evaluation."""
+        if self.writer is None or self.reader is None:
+            raise IPCError("Not connected")
+
+        payload = {"code": code}
+        if session_id:
+            payload["session_id"] = session_id
+
+        await write_message(self.writer, MessageType.REPL_EVAL, payload)
+
+        msg_type, response = await asyncio.wait_for(read_message(self.reader), timeout=30)
+
+        if msg_type != MessageType.REPL_EVAL_RESPONSE:
+            raise IPCError(f"Unexpected response type: {msg_type}")
+
+        return response
+
+    async def send_repl_complete(self, text: str, session_id: str | None = None) -> list[str]:
+        """Send REPL completion request."""
+        if self.writer is None or self.reader is None:
+            raise IPCError("Not connected")
+
+        payload = {"text": text}
+        if session_id:
+            payload["session_id"] = session_id
+
+        await write_message(self.writer, MessageType.REPL_COMPLETE, payload)
+
+        msg_type, response = await asyncio.wait_for(read_message(self.reader), timeout=10)
+
+        if msg_type != MessageType.REPL_COMPLETE_RESPONSE:
+            raise IPCError(f"Unexpected response type: {msg_type}")
+
+        return response.get("completions", [])
+
+    async def start_repl_session(self) -> str:
+        """Start a new REPL session and return the session ID."""
+        if self.writer is None or self.reader is None:
+            raise IPCError("Not connected")
+
+        await write_message(self.writer, MessageType.REPL_SESSION_START, {})
+
+        msg_type, response = await asyncio.wait_for(read_message(self.reader), timeout=10)
+
+        if msg_type != MessageType.REPL_EVAL_RESPONSE:
+            raise IPCError(f"Unexpected response type: {msg_type}")
+
+        return response.get("session_id", "")
+
+    async def end_repl_session(self, session_id: str) -> None:
+        """End a REPL session."""
+        if self.writer is None or self.reader is None:
+            raise IPCError("Not connected")
+
+        await write_message(self.writer, MessageType.REPL_SESSION_END, {"session_id": session_id})
+
+    async def __aenter__(self) -> PersistentClient:
+        await self.connect()
+        return self
+
+    async def __aexit__(self, _exc_type, _exc_value, _tb) -> None:
+        await self.close()
 
 
 class Server:
-    def __init__(self, socket_path: str, handler) -> None:
+    def __init__(self, socket_path: str, handler, repl_handler=None) -> None:
+        """Create a new IPC server.
+
+        Parameters
+        ----------
+        socket_path: str
+            The file path for the unix socket.
+        handler: callable
+            The handler for COMMAND messages. Takes the command payload and
+            returns a response.
+        repl_handler: callable, optional
+            The handler for REPL messages. If None, REPL functionality is disabled.
+        """
         self.socket_path = socket_path
         self.handler = handler
-        self.server = None  # type: asyncio.AbstractServer | None
+        self.repl_handler = repl_handler
+        self.server: asyncio.AbstractServer | None = None
 
         # Use a flag to indicate if session is locked
         self.locked = asyncio.Event()
@@ -207,38 +382,98 @@ class Server:
     def unlock(self):
         self.locked.clear()
 
+    def set_repl_handler(self, handler) -> None:
+        """Set or update the REPL handler."""
+        self.repl_handler = handler
+
     async def _server_callback(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
-        """Callback when a connection is made to the server
+        """Callback when a connection is made to the server.
 
-        Read the data sent from the client, execute the requested command, and
-        send the reply back to the client.
+        Handles a stateful connection that can process multiple messages.
         """
+        logger.debug("Connection made to server")
+
         try:
-            logger.debug("Connection made to server")
-            data = await reader.read()
-            logger.debug("EOF received by server")
+            while True:
+                try:
+                    msg_type, payload = await read_message(reader)
+                except asyncio.IncompleteReadError:
+                    # Connection closed
+                    logger.debug("Client disconnected")
+                    break
+                except IPCError as e:
+                    logger.warning("Invalid message received: %s", e)
+                    break
 
-            req, is_json = _IPC.unpack(data)
-        except IPCError:
-            logger.warning("Invalid data received, closing connection")
-        else:
-            # Don't handle requests when session is locked
-            if self.locked.is_set():
-                rep = (1, {"error": "Session locked."})
-            else:
-                rep = self.handler(req)
+                logger.debug("Received message type: %s", msg_type.name)
 
-            result = _IPC.pack(rep, is_json=is_json)
+                if msg_type == MessageType.CLOSE:
+                    logger.debug("Received close request")
+                    break
 
-            logger.debug("Sending result on receive EOF")
-            writer.write(result)
-            logger.debug("Closing connection on receive EOF")
-            writer.write_eof()
+                if msg_type == MessageType.KEEPALIVE:
+                    await write_message(writer, MessageType.KEEPALIVE_ACK, None)
+                    continue
+
+                if msg_type == MessageType.COMMAND:
+                    # Don't handle requests when session is locked
+                    if self.locked.is_set():
+                        response = (1, {"error": "Session locked."})
+                    else:
+                        response = self.handler(payload)
+                    await write_message(writer, MessageType.COMMAND_RESPONSE, response)
+                    continue
+
+                # REPL messages
+                if msg_type in (
+                    MessageType.REPL_EVAL,
+                    MessageType.REPL_COMPLETE,
+                    MessageType.REPL_SESSION_START,
+                    MessageType.REPL_SESSION_END,
+                ):
+                    if self.repl_handler is None:
+                        repl_response: dict[str, Any] = {
+                            "error": "REPL not enabled. Run start_repl_server first."
+                        }
+                        if msg_type == MessageType.REPL_EVAL:
+                            await write_message(
+                                writer, MessageType.REPL_EVAL_RESPONSE, repl_response
+                            )
+                        elif msg_type == MessageType.REPL_COMPLETE:
+                            await write_message(
+                                writer, MessageType.REPL_COMPLETE_RESPONSE, repl_response
+                            )
+                        else:
+                            await write_message(
+                                writer, MessageType.REPL_EVAL_RESPONSE, repl_response
+                            )
+                    else:
+                        repl_response = await self.repl_handler(msg_type, payload)
+                        if msg_type == MessageType.REPL_EVAL:
+                            await write_message(
+                                writer, MessageType.REPL_EVAL_RESPONSE, repl_response
+                            )
+                        elif msg_type == MessageType.REPL_COMPLETE:
+                            await write_message(
+                                writer, MessageType.REPL_COMPLETE_RESPONSE, repl_response
+                            )
+                        elif msg_type == MessageType.REPL_SESSION_START:
+                            await write_message(
+                                writer, MessageType.REPL_EVAL_RESPONSE, repl_response
+                            )
+                        # REPL_SESSION_END doesn't need a response
+                    continue
+
+                logger.warning("Unhandled message type: %s", msg_type)
+
+        except Exception as e:
+            logger.error("Error in server callback: %s", e)
         finally:
             writer.close()
             await writer.wait_closed()
+            logger.debug("Connection closed")
 
     async def __aenter__(self) -> Server:
         """Start and return the server"""

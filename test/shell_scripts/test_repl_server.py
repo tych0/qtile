@@ -1,14 +1,11 @@
-import asyncio
-import contextlib
-
 import pytest
 
 from libqtile.interactive.repl import (
-    REPL_PORT,
-    TERMINATOR,
-    QtileREPLServer,
+    REPLManager,
+    REPLSession,
     get_completions,
 )
+from libqtile.ipc import MessageType
 
 
 def test_get_completions_top_level():
@@ -38,40 +35,120 @@ def test_get_completions_invalid_expr():
     assert result == []
 
 
+def test_repl_session_evaluate_expression():
+    """Test that REPLSession can evaluate expressions."""
+    session = REPLSession("test-session", {"x": 123})
+    result = session.evaluate_code("x")
+    assert "123" in result
+
+
+def test_repl_session_evaluate_statement():
+    """Test that REPLSession can execute statements."""
+    session = REPLSession("test-session", {})
+    session.evaluate_code("y = 456")
+    result = session.evaluate_code("y")
+    assert "456" in result
+
+
+def test_repl_session_completions():
+    """Test that REPLSession provides completions."""
+    session = REPLSession("test-session", {"qtile": "dummy", "qtiles": 123})
+    result = session.get_completions("qti")
+    assert "qtile" in result
+    assert "qtiles" in result
+
+
+def test_repl_manager_enable_disable():
+    """Test REPLManager enable/disable."""
+    manager = REPLManager()
+    assert not manager.enabled
+
+    # Mock qtile object
+    class MockQtile:
+        locked = False
+
+    manager.enable(MockQtile())
+    assert manager.enabled
+    assert "qtile" in manager.default_locals
+
+    manager.disable()
+    assert not manager.enabled
+    assert len(manager.sessions) == 0
+
+
+def test_repl_manager_session_lifecycle():
+    """Test REPLManager session creation and removal."""
+    manager = REPLManager()
+
+    class MockQtile:
+        locked = False
+
+    manager.enable(MockQtile())
+
+    # Create a session
+    session = manager.get_or_create_session()
+    assert session.session_id in manager.sessions
+
+    # Get the same session back
+    same_session = manager.get_or_create_session(session.session_id)
+    assert same_session is session
+
+    # Remove the session
+    manager.remove_session(session.session_id)
+    assert session.session_id not in manager.sessions
+
+
 @pytest.mark.anyio
-async def test_repl_server_executes_code():
-    repl = QtileREPLServer()
-    locals_dict = {"x": 123}
+async def test_repl_manager_handle_eval():
+    """Test REPLManager handles REPL_EVAL messages."""
+    manager = REPLManager()
 
-    # Start the REPL server in a background task
-    start_task = asyncio.create_task(repl.start(locals_dict=locals_dict))
+    class MockQtile:
+        locked = False
 
-    # Wait for the server to bind the port
-    await asyncio.sleep(0.1)
+    manager.enable(MockQtile(), {"x": 123})
 
-    reader, writer = await asyncio.open_connection("localhost", REPL_PORT)
+    response = await manager.handle_message(MessageType.REPL_EVAL, {"code": "x"})
+    assert "output" in response
+    assert "123" in response["output"]
+    assert "session_id" in response
 
-    try:
-        # Read welcome message
-        welcome = await reader.read(4096)
-        assert b"Connected to Qtile REPL" in welcome
 
-        # Send a simple expression to evaluate
-        writer.write(b"x\n" + f"{TERMINATOR}\n".encode())
-        await writer.drain()
+@pytest.mark.anyio
+async def test_repl_manager_handle_complete():
+    """Test REPLManager handles REPL_COMPLETE messages."""
+    manager = REPLManager()
 
-        # Read REPL result
-        result = await reader.readuntil(f"{TERMINATOR}\n".encode())
-        assert "123" in result.decode()
+    class MockQtile:
+        locked = False
 
-    finally:
-        writer.close()
-        await writer.wait_closed()
+    manager.enable(MockQtile(), {"qtile": "dummy"})
 
-        # Stop the REPL server
-        await repl.stop()
+    response = await manager.handle_message(MessageType.REPL_COMPLETE, {"text": "qti"})
+    assert "completions" in response
+    assert "qtile" in response["completions"]
 
-        # Cancel the server task
-        start_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await start_task
+
+@pytest.mark.anyio
+async def test_repl_manager_handle_session_start():
+    """Test REPLManager handles REPL_SESSION_START messages."""
+    manager = REPLManager()
+
+    class MockQtile:
+        locked = False
+
+    manager.enable(MockQtile())
+
+    response = await manager.handle_message(MessageType.REPL_SESSION_START, {})
+    assert "session_id" in response
+    assert response["session_id"] in manager.sessions
+
+
+@pytest.mark.anyio
+async def test_repl_manager_not_enabled():
+    """Test REPLManager returns error when not enabled."""
+    manager = REPLManager()
+
+    response = await manager.handle_message(MessageType.REPL_EVAL, {"code": "1+1"})
+    assert "error" in response
+    assert "not enabled" in response["error"]
