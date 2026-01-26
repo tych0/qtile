@@ -3,15 +3,11 @@ from __future__ import annotations
 import sys
 import time
 from datetime import datetime, timedelta, timezone, tzinfo
+from zoneinfo import ZoneInfo
 
 from libqtile.command.base import expose_command
 from libqtile.log_utils import logger
 from libqtile.widget import base
-
-try:
-    import pytz
-except ImportError:
-    pass
 
 try:
     import dateutil.tz
@@ -29,10 +25,9 @@ class Clock(base.InLoopPollText):
             "timezone",
             None,
             "The timezone to use for this clock, either as"
-            ' string if pytz or dateutil is installed (e.g. "US/Central" or'
-            " anything in /usr/share/zoneinfo), or as tzinfo (e.g."
-            " datetime.timezone.utc). None means the system local timezone and is"
-            " the default.",
+            ' string (e.g. "US/Central" or anything in /usr/share/zoneinfo),'
+            " or as tzinfo (e.g. datetime.timezone.utc). None means the system"
+            " local timezone and is the default.",
         ),
     ]
     DELTA = timedelta(seconds=0.5)
@@ -54,17 +49,14 @@ class Clock(base.InLoopPollText):
                 return None
 
             # A string timezone needs to be converted to a tzinfo object
-            if "pytz" in sys.modules:
-                return pytz.timezone(timezone)
-            elif "dateutil" in sys.modules:
-                return dateutil.tz.gettz(timezone)
-            else:
-                logger.warning(
-                    "Clock widget can not infer its timezone from a"
-                    " string without pytz or dateutil. Install one"
-                    " of these libraries, or give it a"
-                    " datetime.tzinfo instance."
-                )
+            # Use zoneinfo from the standard library (Python 3.9+)
+            try:
+                return ZoneInfo(timezone)
+            except KeyError:
+                # Fall back to dateutil if available and zoneinfo fails
+                if "dateutil" in sys.modules:
+                    return dateutil.tz.gettz(timezone)
+                logger.warning("Unknown timezone: %s", timezone)
         elif timezone is None:
             pass
         else:

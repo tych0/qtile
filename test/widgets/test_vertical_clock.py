@@ -25,8 +25,7 @@ class MockDatetime(datetime.datetime):
 
 @pytest.fixture
 def patched_clock(monkeypatch):
-    # Stop system importing these modules in case they exist on environment
-    monkeypatch.setitem(sys.modules, "pytz", None)
+    # Stop system importing dateutil in case it exists on environment
     monkeypatch.setitem(sys.modules, "dateutil", None)
     monkeypatch.setitem(sys.modules, "dateutil.tz", None)
 
