@@ -21,7 +21,9 @@ if typing.TYPE_CHECKING:
 
 @dataclass
 class Output:
-    name: str | None
+    port: str | None
+    make: str | None
+    model: str | None
     serial: str | None
     rect: ScreenRect
 
