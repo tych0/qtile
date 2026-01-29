@@ -7,6 +7,9 @@ class Configurable:
     def __init__(self, **config):
         self._variable_defaults = {}
         self._user_config = config
+        # Set all user config values as instance attributes
+        for name, value in config.items():
+            setattr(self, name, value)
 
     def add_defaults(self, defaults):
         """Add defaults to this object, overwriting any which already exist"""
@@ -24,6 +27,13 @@ class Configurable:
             elif name in self.global_defaults:
                 value = self.global_defaults[name]
             else:
+                # Don't overwrite methods/properties defined on the class
+                # when using the default value
+                class_attr = getattr(type(self), name, None)
+                if class_attr is not None and (
+                    callable(class_attr) or isinstance(class_attr, property)
+                ):
+                    continue
                 value = default
             setattr(self, name, value)
 
