@@ -47,6 +47,10 @@ class StockTicker(GenPollUrl):
         url = "https://www.alphavantage.co/query?" + urlencode(self.query)
         return url
 
+    @url.setter
+    def url(self, value):
+        pass  # URL is computed dynamically, ignore any set value
+
     def parse(self, body):
         last = None
         for k, v in body["Meta Data"].items():

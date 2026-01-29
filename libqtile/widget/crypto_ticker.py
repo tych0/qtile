@@ -84,6 +84,10 @@ class CryptoTicker(GenPollUrl):
     def url(self):
         return self.query_url.format(self.crypto, self.currency)
 
+    @url.setter
+    def url(self, value):
+        pass  # URL is computed dynamically, ignore any set value
+
     def parse(self, body):
         variables = dict()
         variables["crypto"] = self.crypto

@@ -264,6 +264,10 @@ class OpenWeather(GenPollUrl):
 
         return QUERY_URL + urlencode(params)
 
+    @url.setter
+    def url(self, value):
+        pass  # URL is computed dynamically, ignore any set value
+
     def parse(self, response):
         try:
             rp = _OpenWeatherResponseParser(response, self.dateformat, self.timeformat)
