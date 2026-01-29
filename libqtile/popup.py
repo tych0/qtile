@@ -17,6 +17,19 @@ class Popup(configurable.Configurable):
     This class can be used to create popup windows that display images and/or text.
     """
 
+    opacity: float
+    foreground: ColorType
+    background: ColorType
+    border: ColorType
+    border_width: int
+    font: str
+    fontsize: int
+    fontshadow: ColorType | None
+    horizontal_padding: int
+    vertical_padding: int
+    text_alignment: str
+    wrap: bool
+
     defaults = [
         ("opacity", 1.0, "Opacity of notifications."),
         ("foreground", "#ffffff", "Colour of text."),

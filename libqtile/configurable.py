@@ -14,18 +14,18 @@ class Configurable:
         # value. If a mutable value were set and it were changed in one place
         # it would affect all other instances, since this is typically called
         # on __init__
-        self._variable_defaults.update((d[0], copy.copy(d[1])) for d in defaults)
-
-    def __getattr__(self, name):
-        if name == "_variable_defaults":
-            raise AttributeError
-        found, value = self._find_default(name)
-        if found:
+        for d in defaults:
+            name, default = d[0], copy.copy(d[1])
+            self._variable_defaults[name] = default
+            # Set the attribute directly using the resolved value
+            # (user config > global defaults > variable defaults)
+            if name in self._user_config:
+                value = self._user_config[name]
+            elif name in self.global_defaults:
+                value = self.global_defaults[name]
+            else:
+                value = default
             setattr(self, name, value)
-            return value
-        else:
-            cname = self.__class__.__name__
-            raise AttributeError(f"{cname} has no attribute: {name}")
 
     def _find_default(self, name):
         """Returns a tuple (found, value)"""

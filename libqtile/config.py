@@ -1256,6 +1256,15 @@ class DropDown(configurable.Configurable):
     scripted trigger.
     """
 
+    x: float
+    y: float
+    width: float
+    height: float
+    opacity: float
+    on_focus_lost_hide: bool
+    warp_pointer: bool
+    match: Match | None
+
     defaults = (
         (
             "x",

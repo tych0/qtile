@@ -17,6 +17,7 @@ from libqtile.utils import send_notification
 from libqtile.widget import base
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from typing import Any
 
     from libqtile.utils import ColorsType
@@ -172,6 +173,14 @@ def thunderbolt_smart_charge() -> tuple[int, int]:
 
 
 class _LinuxBattery(_Battery, configurable.Configurable):
+    status_file: str | None
+    energy_now_file: str | None
+    energy_full_file: str | None
+    power_now_file: str | None
+    charge_controller: Callable[[], tuple[int, int]] | None
+    force_charge: bool
+    battery: str
+
     defaults = [
         ("status_file", None, "Name of status file in /sys/class/power_supply/battery_name"),
         (
