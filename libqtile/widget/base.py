@@ -196,6 +196,7 @@ class _Widget(CommandObject, configurable.Configurable):
 
     def _configure(self, qtile, bar):
         self._test_orientation_compatibility(bar.horizontal)
+        self._apply_global_defaults()
 
         self.qtile = qtile
         self.bar = bar

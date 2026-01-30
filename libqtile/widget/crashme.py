@@ -20,10 +20,7 @@ class _CrashMe(base._TextBox):
         base._TextBox.__init__(self, "Crash me !", width, **config)
 
     def _configure(self, qtile, bar):
-        base._Widget._configure(self, qtile, bar)
-        self.layout = self.drawer.textlayout(
-            self.text, self.foreground, self.font, self.fontsize, self.fontshadow, markup=True
-        )
+        base._TextBox._configure(self, qtile, bar)
 
     def button_press(self, x, y, button):
         if button == 1:

@@ -55,6 +55,7 @@ class _Extension(configurable.Configurable):
 
     def _configure(self, qtile):
         self.qtile = qtile
+        self._apply_global_defaults()
         self._check_colors()
 
     def run(self):
