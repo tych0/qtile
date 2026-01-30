@@ -55,6 +55,7 @@ class Config:
     wl_xcursor_size: int
     idle_timers: list[IdleTimer]
     idle_inhibitors: list[IdleInhibitor]
+    fake_screens: list[Screen]
 
     def __init__(self, file_path=None, **settings):
         """Create a Config() object from settings
@@ -65,11 +66,8 @@ class Config:
         self.file_path = file_path
         self.update(**settings)
 
-    def update(self, *, fake_screens=None, **settings):
+    def update(self, **settings):
         from libqtile.resources import default_config
-
-        if fake_screens:
-            self.fake_screens = fake_screens
 
         default = vars(default_config)
         for key in self.__annotations__.keys():
