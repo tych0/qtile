@@ -120,10 +120,9 @@ def test_qtile_cmd(manager):
         "height": 600,
         "index": 0,
         "width": 800,
+        "port": output_name,
         "x": 0,
         "y": 0,
-        "serial": None,
-        "name": output_name,
     }
 
     bar = run_qtile_cmd("-s {} -o bar {} -f info".format(manager.sockfile, "bottom"))

@@ -11,9 +11,9 @@ def identify_output(opts) -> None:
     try:
         for i, info in enumerate(conn.pseudoscreens):
             port = info.port or "Unknown"
-            make = info.make or "N/A"
-            model = info.model or "N/A"
-            serial = info.serial or "N/A"
+            make = info.make or "Unknown"
+            model = info.model or "Unknown"
+            serial = info.serial or "Unknown"
 
             print(f"Output {i}:")
             print(f"  Port: {port}")
