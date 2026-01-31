@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from types import FunctionType
     from typing import Any, Literal
 
-    from libqtile.config import Group, IdleInhibitor, IdleTimer, Key, Mouse, Rule, Screen
+    from libqtile.config import Group, IdleInhibitor, IdleTimer, Key, Mouse, Output, Rule, Screen
     from libqtile.layout.base import Layout
 
 
