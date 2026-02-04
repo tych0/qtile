@@ -1,7 +1,6 @@
 import pickle
 import shutil
 import textwrap
-from multiprocessing import Value
 
 import pytest
 
@@ -72,16 +71,19 @@ def test_restart_hook_and_state(manager_nospawn, request, backend, backend_name)
 
     # Set up test for restart hook.
     # Use a counter in manager and increment when hook is fired
-    def inc_restart_call():
-        manager.restart_calls.value += 1
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
-    manager.restart_calls = Value("i", 0)
+    def inc_restart_call():
+        libqtile.qtile.test_data += 1
+
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.restart(inc_restart_call)
 
     manager.start(TwoScreenConfig)
 
     # Check that hook hasn't been fired yet.
-    assert manager.restart_calls.value == 0
+    assert manager.c.get_test_data() == 0
 
     manager.c.group["c"].toscreen(0)
     manager.c.group["d"].toscreen(1)
@@ -97,7 +99,7 @@ def test_restart_hook_and_state(manager_nospawn, request, backend, backend_name)
     manager.c.restart()
 
     # Check hook fired
-    assert manager.restart_calls.value == 1
+    assert manager.c.get_test_data() == 1
 
     # Get the path to the state file
     state_file = manager.c.eval("self.lifecycle.state_file")

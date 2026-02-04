@@ -2,7 +2,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-from multiprocessing import Value
 
 import pytest
 import xcffib.xproto
@@ -19,6 +18,7 @@ from test.helpers import (
     SECOND_WIDTH,
     WIDTH,
     BareConfig,
+    Retry,
     assert_window_died,
     window_by_name,
 )
@@ -89,12 +89,18 @@ def test_urgent_hook_fire(xmanager_nospawn):
     xmanager_nospawn.display = xmanager_nospawn.backend.env["DISPLAY"]
     conn = Connection(xmanager_nospawn.display)
 
-    xmanager_nospawn.hook_fired = Value("i", 0)
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
     def _hook_test(val):
-        xmanager_nospawn.hook_fired.value += 1
+        libqtile.qtile.test_data += 1
 
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.client_urgent_hint_changed(_hook_test)
+
+    @Retry(ignore_exceptions=(AssertionError,))
+    def assert_hook_fired(num):
+        assert xmanager_nospawn.c.get_test_data() == num
 
     xmanager_nospawn.start(UrgentConfig)
 
@@ -109,8 +115,8 @@ def test_urgent_hook_fire(xmanager_nospawn):
     conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
     conn.xsync()
 
+    assert_hook_fired(1)
     xmanager_nospawn.terminate()
-    assert xmanager_nospawn.hook_fired.value == 1
 
     # test that focus_on_window_activation = "smart" also fires the hook
     xmanager_nospawn.start(SmartConfig, no_spawn=True)
@@ -125,9 +131,9 @@ def test_urgent_hook_fire(xmanager_nospawn):
     )
     conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
     conn.xsync()
-    xmanager_nospawn.terminate()
 
-    assert xmanager_nospawn.hook_fired.value == 2
+    assert_hook_fired(1)
+    xmanager_nospawn.terminate()
 
     # test that a custom function also fires the hook
     xmanager_nospawn.start(FuncConfig, no_spawn=True)
@@ -143,9 +149,8 @@ def test_urgent_hook_fire(xmanager_nospawn):
     conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
     conn.xsync()
 
+    assert_hook_fired(1)
     xmanager_nospawn.terminate()
-
-    assert xmanager_nospawn.hook_fired.value == 3
 
 
 @manager_config

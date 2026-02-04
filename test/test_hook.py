@@ -1,5 +1,4 @@
 import asyncio
-from multiprocessing import Value
 
 import pytest
 
@@ -118,34 +117,39 @@ def test_can_subscribe_to_startup_hooks(manager_nospawn):
             setattr(config, attr, getattr(default_config, attr))
     manager = manager_nospawn
 
-    manager.startup_once_calls = Value("i", 0)
-    manager.startup_calls = Value("i", 0)
-    manager.startup_complete_calls = Value("i", 0)
+    def _init_test_data():
+        if not hasattr(libqtile.qtile, "test_data"):
+            libqtile.qtile.test_data = {"startup_once": 0, "startup": 0, "startup_complete": 0}
 
     def inc_startup_once_calls():
-        manager.startup_once_calls.value += 1
+        _init_test_data()
+        libqtile.qtile.test_data["startup_once"] += 1
 
     def inc_startup_calls():
-        manager.startup_calls.value += 1
+        _init_test_data()
+        libqtile.qtile.test_data["startup"] += 1
 
     def inc_startup_complete_calls():
-        manager.startup_complete_calls.value += 1
+        _init_test_data()
+        libqtile.qtile.test_data["startup_complete"] += 1
 
     hook.subscribe.startup_once(inc_startup_once_calls)
     hook.subscribe.startup(inc_startup_calls)
     hook.subscribe.startup_complete(inc_startup_complete_calls)
 
     manager.start(config)
-    assert manager.startup_once_calls.value == 1
-    assert manager.startup_calls.value == 1
-    assert manager.startup_complete_calls.value == 1
+    data = manager.c.get_test_data()
+    assert data["startup_once"] == 1
+    assert data["startup"] == 1
+    assert data["startup_complete"] == 1
 
     # Restart and check that startup_once doesn't fire again
     manager.terminate()
     manager.start(config, no_spawn=True)
-    assert manager.startup_once_calls.value == 1
-    assert manager.startup_calls.value == 2
-    assert manager.startup_complete_calls.value == 2
+    data = manager.c.get_test_data()
+    assert data["startup_once"] == 0
+    assert data["startup"] == 1
+    assert data["startup_complete"] == 1
 
 
 @pytest.mark.usefixtures("hook_fixture")
@@ -212,57 +216,64 @@ def test_user_hook(manager_nospawn):
             setattr(config, attr, getattr(default_config, attr))
     manager = manager_nospawn
 
-    manager.custom_no_arg_text = Value("u", "A")
-    manager.custom_text = Value("u", "A")
+    def init_test_data():
+        libqtile.qtile.test_data = {"no_arg_text": "A", "text": "A"}
 
     # Define two functions: first takes no args, second takes a single arg
     def predefined_text():
-        with manager.custom_no_arg_text.get_lock():
-            manager.custom_no_arg_text.value = "B"
+        libqtile.qtile.test_data["no_arg_text"] = "B"
 
     def defined_text(text):
-        with manager.custom_text.get_lock():
-            manager.custom_text.value = text
+        libqtile.qtile.test_data["text"] = text
 
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.user("set_text")(predefined_text)
     hook.subscribe.user("define_text")(defined_text)
 
     # Check values are as initialised
     manager.start(config)
-    assert manager.custom_no_arg_text.value == "A"
-    assert manager.custom_text.value == "A"
+    data = manager.c.get_test_data()
+    assert data["no_arg_text"] == "A"
+    assert data["text"] == "A"
 
     # Check hooked function with no args
     manager.c.fire_user_hook("set_text")
-    assert manager.custom_no_arg_text.value == "B"
+    assert manager.c.get_test_data()["no_arg_text"] == "B"
 
     # Check hooked function with a single arg
     manager.c.fire_user_hook("define_text", "C")
-    assert manager.custom_text.value == "C"
+    assert manager.c.get_test_data()["text"] == "C"
 
 
 def test_shutdown(manager_nospawn):
-    def inc_shutdown_calls():
-        manager_nospawn.shutdown_calls.value += 1
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
-    manager_nospawn.shutdown_calls = Value("i", 0)
+    def inc_shutdown_calls():
+        libqtile.qtile.test_data += 1
+
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.shutdown(inc_shutdown_calls)
 
     manager_nospawn.start(BareConfig)
-    manager_nospawn.c.shutdown()
-    assert manager_nospawn.shutdown_calls.value == 1
+    assert manager_nospawn.c.get_test_data() == 0
+    manager_nospawn.c.eval("from libqtile import hook; hook.fire('shutdown')")
+    assert manager_nospawn.c.get_test_data() == 1
 
 
 @dualmonitor
 def test_setgroup(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):
-        assert manager_nospawn.setgroup_calls.value == num
+        assert manager_nospawn.c.get_test_data() == num
+
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
     def inc_setgroup_calls():
-        manager_nospawn.setgroup_calls.value += 1
+        libqtile.qtile.test_data += 1
 
-    manager_nospawn.setgroup_calls = Value("i", 0)
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.setgroup(inc_setgroup_calls)
 
     # Starts with two because of the dual screen
@@ -328,12 +339,15 @@ def test_delgroup(manager_nospawn):
 def test_changegroup(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):
-        assert manager_nospawn.changegroup_calls.value == num
+        assert manager_nospawn.c.get_test_data() == num
+
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
     def inc_changegroup_calls():
-        manager_nospawn.changegroup_calls.value += 1
+        libqtile.qtile.test_data += 1
 
-    manager_nospawn.changegroup_calls = Value("i", 0)
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.changegroup(inc_changegroup_calls)
 
     # Starts with four beacuase of four groups in BareConfig
@@ -357,12 +371,15 @@ def test_changegroup(manager_nospawn):
 def test_focus_change(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):
-        assert manager_nospawn.focus_change_calls.value == num
+        assert manager_nospawn.c.get_test_data() == num
+
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
     def inc_focus_change_calls():
-        manager_nospawn.focus_change_calls.value += 1
+        libqtile.qtile.test_data += 1
 
-    manager_nospawn.focus_change_calls = Value("i", 0)
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.focus_change(inc_focus_change_calls)
 
     manager_nospawn.start(BareConfig)
@@ -400,12 +417,15 @@ def test_focus_change(manager_nospawn):
 def test_float_change(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):
-        assert manager_nospawn.float_change_calls.value == num
+        assert manager_nospawn.c.get_test_data() == num
+
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
     def inc_float_change_calls():
-        manager_nospawn.float_change_calls.value += 1
+        libqtile.qtile.test_data += 1
 
-    manager_nospawn.float_change_calls = Value("i", 0)
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.float_change(inc_float_change_calls)
 
     manager_nospawn.start(BareConfig)
@@ -650,12 +670,15 @@ def test_net_wm_icon_change(manager_nospawn, backend_name):
 def test_screen_change(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):
-        assert manager_nospawn.screen_change_calls.value == num
+        assert manager_nospawn.c.get_test_data() == num
+
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
     def inc_screen_change_calls(event):
-        manager_nospawn.screen_change_calls.value += 1
+        libqtile.qtile.test_data += 1
 
-    manager_nospawn.screen_change_calls = Value("i", 0)
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.screen_change(inc_screen_change_calls)
 
     manager_nospawn.start(BareConfig)
@@ -666,12 +689,15 @@ def test_screen_change(manager_nospawn):
 def test_screens_reconfigured(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):
-        assert manager_nospawn.screens_reconfigured_calls.value == num
+        assert manager_nospawn.c.get_test_data() == num
+
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
     def inc_screens_reconfigured_calls():
-        manager_nospawn.screens_reconfigured_calls.value += 1
+        libqtile.qtile.test_data += 1
 
-    manager_nospawn.screens_reconfigured_calls = Value("i", 0)
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.screens_reconfigured(inc_screens_reconfigured_calls)
 
     manager_nospawn.start(BareConfig)
@@ -684,12 +710,15 @@ def test_screens_reconfigured(manager_nospawn):
 def test_current_screen_change(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):
-        assert manager_nospawn.current_screen_change_calls.value == num
+        assert manager_nospawn.c.get_test_data() == num
+
+    def init_test_data():
+        libqtile.qtile.test_data = 0
 
     def inc_current_screen_change_calls():
-        manager_nospawn.current_screen_change_calls.value += 1
+        libqtile.qtile.test_data += 1
 
-    manager_nospawn.current_screen_change_calls = Value("i", 0)
+    hook.subscribe.startup(init_test_data)
     hook.subscribe.current_screen_change(inc_current_screen_change_calls)
 
     manager_nospawn.start(BareConfig)
