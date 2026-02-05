@@ -159,7 +159,7 @@ screens = [
 
 # Instead of screens, you can define a function here to specify which Screen
 # should correspond to which Output.
-generate_screens: Callable[[list[Output]], list[Screen] = None
+generate_screens = None
 
 # Drag floating layouts.
 mouse = [

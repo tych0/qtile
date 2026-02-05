@@ -474,7 +474,12 @@ class Screen(CommandObject):
 
         # otherwise, use output matching: if a monitor has its geometry
         # changed, this still allows us to reason correctly about focus.
-        return self.output == other.output
+        # output is set later during _process_screens(), so if it's not set
+        # yet, fall back to identity comparison.
+        try:
+            return self.output == other.output
+        except AttributeError:
+            return self is other
 
     def __hash__(self) -> int:
         return hash((self.x, self.y, self.width, self.height))
