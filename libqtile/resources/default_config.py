@@ -157,6 +157,10 @@ screens = [
     ),
 ]
 
+# Instead of screens, you can define a function here to specify which Screen
+# should correspond to which Output.
+generate_screens: Callable[[list[Output]], list[Screen] = None
+
 # Drag floating layouts.
 mouse = [
     Drag([mod], "Button1", lazy.window.set_position_floating(), start=lazy.window.get_position()),
