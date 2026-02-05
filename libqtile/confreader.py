@@ -73,8 +73,6 @@ class Config:
 
         if fake_screens is not None:
             self.fake_screens = fake_screens
-        else:
-            self.fake_screens = []
 
         default = vars(default_config)
         for key in self.__annotations__.keys():
