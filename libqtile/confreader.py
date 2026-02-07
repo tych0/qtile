@@ -71,7 +71,9 @@ class Config:
     def update(self, fake_screens=None, **settings):
         from libqtile.resources import default_config
 
-        if fake_screens is not None:
+        if fake_screens is None:
+            self.fake_screens = []
+        else:
             self.fake_screens = fake_screens
 
         default = vars(default_config)
