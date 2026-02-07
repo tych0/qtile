@@ -160,6 +160,7 @@ screens = [
 
 # Instead of screens, you can define a function here to specify which Screen
 # should correspond to which Output.
+fake_screens: list[Screen] | None = None
 generate_screens: Callable[[list[Output]], list[Screen]] | None = None
 
 # Drag floating layouts.

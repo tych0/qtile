@@ -400,7 +400,7 @@ class Qtile(CommandObject):
         return None
 
     def get_output_info(self) -> list[Output]:
-        if self.config.fake_screens:
+        if self.config.fake_screens is not None:
             return [
                 Output(None, None, None, None, ScreenRect(s.x, s.y, s.width, s.height))
                 for s in self.config.fake_screens

@@ -68,13 +68,8 @@ class Config:
         self.file_path = file_path
         self.update(**settings)
 
-    def update(self, fake_screens=None, **settings):
+    def update(self, **settings):
         from libqtile.resources import default_config
-
-        if fake_screens is None:
-            self.fake_screens = []
-        else:
-            self.fake_screens = fake_screens
 
         default = vars(default_config)
         for key in self.__annotations__.keys():
