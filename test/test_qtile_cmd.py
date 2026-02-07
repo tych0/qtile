@@ -112,7 +112,7 @@ def test_qtile_cmd(manager):
     assert group["layouts"] == ["stack", "stack", "stack"]
     assert group["focus"] == "foo"
 
-    output_name = "default"
+    output_name = "screen"
     if manager.backend.name == "wayland":
         output_name = "HEADLESS-1"
 
