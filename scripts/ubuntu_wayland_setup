@@ -9,6 +9,7 @@ set -e
 
 mkdir -p cache
 
+DESTDIR="$(pwd)/cache/wayland_root"
 
 # The versions we want
 WAYLAND=1.24.0
@@ -61,82 +62,90 @@ sudo apt-get install -y --no-install-recommends \
      ninja-build \
      meson
 
-# Build wayland
-tarball="wayland-$WAYLAND.tar.xz"
-fetch_source "https://gitlab.freedesktop.org/wayland/wayland/-/releases/$WAYLAND/downloads/$tarball" "$tarball"
-tar -xJf "cache/$tarball"
-cd wayland-$WAYLAND
-meson setup build -Ddocumentation=false --prefix=/usr
-ninja -C build
-sudo ninja -C build install
-cd ../
+if [ -d "$DESTDIR" ]; then
+    echo "cache/wayland_root found, skipping build."
+else
+    # Build wayland
+    tarball="wayland-$WAYLAND.tar.xz"
+    fetch_source "https://gitlab.freedesktop.org/wayland/wayland/-/releases/$WAYLAND/downloads/$tarball" "$tarball"
+    tar -xJf "cache/$tarball"
+    cd wayland-$WAYLAND
+    meson setup build -Ddocumentation=false --prefix=/usr
+    ninja -C build
+    DESTDIR="$DESTDIR" ninja -C build install
+    cd ../
 
-# Build wayland-protocols
-tarball="wayland-protocols-$WAYLAND_PROTOCOLS.tar.xz"
-fetch_source "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/$WAYLAND_PROTOCOLS/downloads/$tarball" "$tarball"
-tar -xJf "cache/$tarball"
-cd wayland-protocols-$WAYLAND_PROTOCOLS
-meson setup build -Dtests=false --prefix=/usr
-ninja -C build
-sudo ninja -C build install
-cd ../
+    # Build wayland-protocols
+    tarball="wayland-protocols-$WAYLAND_PROTOCOLS.tar.xz"
+    fetch_source "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/$WAYLAND_PROTOCOLS/downloads/$tarball" "$tarball"
+    tar -xJf "cache/$tarball"
+    cd wayland-protocols-$WAYLAND_PROTOCOLS
+    meson setup build -Dtests=false --prefix=/usr
+    ninja -C build
+    DESTDIR="$DESTDIR" ninja -C build install
+    cd ../
 
-# Build libdrm
-tarball="libdrm-libdrm-$LIBDRM.tar.gz"
-fetch_source "https://gitlab.freedesktop.org/mesa/libdrm/-/archive/libdrm-$LIBDRM/$tarball" "$tarball"
-tar -xzf "cache/$tarball"
-cd libdrm-libdrm-$LIBDRM
-meson setup build --prefix=/usr
-ninja -C build
-sudo ninja -C build install
-cd ../
+    # Build libdrm
+    tarball="libdrm-libdrm-$LIBDRM.tar.gz"
+    fetch_source "https://gitlab.freedesktop.org/mesa/libdrm/-/archive/libdrm-$LIBDRM/$tarball" "$tarball"
+    tar -xzf "cache/$tarball"
+    cd libdrm-libdrm-$LIBDRM
+    meson setup build --prefix=/usr
+    ninja -C build
+    DESTDIR="$DESTDIR" ninja -C build install
+    cd ../
 
-# Build seatd
-tarball="$SEATD.tar.gz"
-fetch_source "https://github.com/kennylevinsen/seatd/archive/refs/tags/$tarball" "$tarball"
-tar -xzf "cache/$tarball"
-cd seatd-$SEATD
-meson setup build --prefix=/usr
-ninja -C build
-sudo ninja -C build install
-cd ../
+    # Build seatd
+    tarball="$SEATD.tar.gz"
+    fetch_source "https://github.com/kennylevinsen/seatd/archive/refs/tags/$tarball" "$tarball"
+    tar -xzf "cache/$tarball"
+    cd seatd-$SEATD
+    meson setup build --prefix=/usr
+    ninja -C build
+    DESTDIR="$DESTDIR" ninja -C build install
+    cd ../
 
-# Build pixman
-tarball="pixman-pixman-$PIXMAN.tar.gz"
-fetch_source "https://gitlab.freedesktop.org/pixman/pixman/-/archive/pixman-$PIXMAN/$tarball" "$tarball"
-tar -xzf "cache/$tarball"
-cd pixman-pixman-$PIXMAN
-meson setup build --prefix=/usr
-ninja -C build
-sudo ninja -C build install
-cd ../
+    # Build pixman
+    tarball="pixman-pixman-$PIXMAN.tar.gz"
+    fetch_source "https://gitlab.freedesktop.org/pixman/pixman/-/archive/pixman-$PIXMAN/$tarball" "$tarball"
+    tar -xzf "cache/$tarball"
+    cd pixman-pixman-$PIXMAN
+    meson setup build --prefix=/usr
+    ninja -C build
+    DESTDIR="$DESTDIR" ninja -C build install
+    cd ../
 
-# Build hwdata
-tarball="v$HWDATA.tar.gz"
-fetch_source "https://github.com/vcrhonek/hwdata/archive/refs/tags/$tarball" "$tarball"
-tar -xzf "cache/$tarball"
-cd hwdata-$HWDATA
-./configure --prefix=/usr --libdir=/lib --datadir=/usr/share
-make
-sudo make install
-cd ../
+    # Build hwdata
+    tarball="v$HWDATA.tar.gz"
+    fetch_source "https://github.com/vcrhonek/hwdata/archive/refs/tags/$tarball" "$tarball"
+    tar -xzf "cache/$tarball"
+    cd hwdata-$HWDATA
+    ./configure --prefix=/usr --libdir=/lib --datadir=/usr/share
+    make
+    DESTDIR="$DESTDIR" make install
+    cd ../
 
-# Build xwayland
-tarball="xserver-xwayland-$XWAYLAND.tar.gz"
-fetch_source "https://gitlab.freedesktop.org/xorg/xserver/-/archive/xwayland-$XWAYLAND/$tarball" "$tarball"
-tar -xzf "cache/$tarball"
-cd xserver-xwayland-$XWAYLAND
-meson setup build --prefix=/usr
-ninja -C build
-sudo ninja -C build install
-cd ../
+    # Build xwayland
+    tarball="xserver-xwayland-$XWAYLAND.tar.gz"
+    fetch_source "https://gitlab.freedesktop.org/xorg/xserver/-/archive/xwayland-$XWAYLAND/$tarball" "$tarball"
+    tar -xzf "cache/$tarball"
+    cd xserver-xwayland-$XWAYLAND
+    meson setup build --prefix=/usr
+    ninja -C build
+    DESTDIR="$DESTDIR" ninja -C build install
+    cd ../
 
-# Build wlroots
-tarball="wlroots-$WLROOTS.tar.gz"
-fetch_source "https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/$WLROOTS/$tarball" "$tarball"
-tar -xzf "cache/$tarball"
-cd wlroots-$WLROOTS
-meson setup build -Dexamples=false --prefix=/usr -Dxwayland=enabled
-ninja -C build
-sudo ninja -C build install
-cd ../
+    # Build wlroots
+    tarball="wlroots-$WLROOTS.tar.gz"
+    fetch_source "https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/$WLROOTS/$tarball" "$tarball"
+    tar -xzf "cache/$tarball"
+    cd wlroots-$WLROOTS
+    meson setup build -Dexamples=false --prefix=/usr -Dxwayland=enabled
+    ninja -C build
+    DESTDIR="$DESTDIR" ninja -C build install
+    cd ../
+fi
+
+# Install from DESTDIR to system
+sudo cp -a "$DESTDIR"/* /
+sudo ldconfig
