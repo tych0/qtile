@@ -127,8 +127,8 @@ def test_qtile_cmd(manager):
         "model": None,
         "serial": None,
         "rect": {
-            "height": 800,
-            "width": 600,
+            "height": 600,
+            "width": 800,
             "x": 0,
             "y": 0,
         },

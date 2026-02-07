@@ -56,7 +56,7 @@ class Config:
     wl_xcursor_size: int
     idle_timers: list[IdleTimer]
     idle_inhibitors: list[IdleInhibitor]
-    fake_screens: list[Screen]
+    fake_screens: list[Screen] | None
     generate_screens: Callable[[list[Output]], list[Screen]] | None
 
     def __init__(self, file_path=None, **settings):
