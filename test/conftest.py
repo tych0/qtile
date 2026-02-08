@@ -42,7 +42,7 @@ dualmonitor = pytest.mark.parametrize("outputs", [2], indirect=True)
 multimonitor = pytest.mark.parametrize("outputs", [1, 2], indirect=True)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def xephyr(request, outputs):
     if "x11" not in request.config.option.backend:
         yield
