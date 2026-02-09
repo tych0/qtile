@@ -1,8 +1,9 @@
 import os
+from collections.abc import Callable
 
 import libqtile.resources
 from libqtile import bar, layout, qtile, widget
-from libqtile.config import Click, Drag, Group, Key, Match, Screen
+from libqtile.config import Click, Drag, Group, Key, Match, Output, Screen
 from libqtile.lazy import lazy
 from libqtile.utils import guess_terminal
 
@@ -156,6 +157,11 @@ screens = [
         # x11_drag_polling_rate = 60,
     ),
 ]
+
+# Instead of screens, you can define a function here to specify which Screen
+# should correspond to which Output.
+fake_screens: list[Screen] | None = None
+generate_screens: Callable[[list[Output]], list[Screen]] | None = None
 
 # Drag floating layouts.
 mouse = [
