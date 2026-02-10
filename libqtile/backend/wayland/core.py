@@ -531,12 +531,18 @@ class Core(base.Core):
 
         win = self.qtile.windows_map.get(view.wid)
 
-        if self.qtile.hovered_window is not win:
+        entered_new = self.qtile.hovered_window is not win
+        if entered_new:
             # We only want to fire client_mouse_enter once, so check
             # self.qtile.hovered_window.
             hook.fire("client_mouse_enter", win)
 
-        if win is not self.qtile.current_window:
+        # Only follow mouse focus when the pointer enters a new window, not on
+        # every motion within the same window. This matches X11's EnterNotify
+        # semantics and prevents layout changes from causing focus steal when
+        # the user moves the mouse within the window that ended up under the
+        # pointer after the layout change.
+        if entered_new and win is not self.qtile.current_window:
             if motion and self.qtile.config.follow_mouse_focus is True:
                 if isinstance(win, Static):
                     self.qtile.focus_screen(win.screen.index, False)

@@ -956,6 +956,37 @@ def test_focus_stays_on_layout_switch(manager):
     assert manager.c.window.info()["name"] == "one"
 
 
+@manager_config
+def test_hovered_window_updated_on_layout_change(manager):
+    """hovered_window should reflect the actual window under the mouse after layout change."""
+    manager.test_window("one")
+    manager.test_window("two")
+
+    # We start in Stack(num_stacks=1). "two" is focused and covers everything.
+    # Move mouse to the left side of the screen. Since "two" covers the whole
+    # screen, the mouse is over "two".
+    manager.backend.fake_motion(100, 290)
+    assert manager.c.eval("self.hovered_window.name") == "two"
+
+    # Switch to Stack(num_stacks=2). Now windows are side by side:
+    # "one" in left column (0-400), "two" in right column (400-800).
+    # Mouse at (100, 290) is now over "one", but without the fix
+    # hovered_window would still say "two".
+    manager.c.next_layout()
+
+    assert manager.c.eval("self.hovered_window.name") == "one"
+
+    # Focus should remain on "two" (the previously focused window), not be
+    # stolen by follow_mouse_focus due to the layout change.
+    assert manager.c.window.info()["name"] == "two"
+
+    # Moving the mouse within the same window ("one") should NOT steal focus
+    # to "one" -- follow_mouse_focus should only trigger when the pointer
+    # enters a different window, not for motion within the same window.
+    manager.backend.fake_motion(110, 290)
+    assert manager.c.window.info()["name"] == "two"
+
+
 @pytest.mark.parametrize("manager", [BareConfig, ManagerConfig], indirect=True)
 def test_map_request(manager):
     manager.test_window("one")
