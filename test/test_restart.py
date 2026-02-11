@@ -107,12 +107,31 @@ def test_restart_hook_and_state(manager_nospawn, request, backend, backend_name)
     original_state = f"{state_file}-original"
     shutil.copy(state_file, original_state)
 
+    # Prevent os.execv in the subprocess when it exits, since lifecycle behavior
+    # is RESTART. Without this, the subprocess may be replaced via os.execv and
+    # never fully terminate, and the X11 cleanup (deleting _NET_SUPPORTING_WM_CHECK)
+    # might not complete before the new manager starts.
+    manager.c.eval(
+        textwrap.dedent(
+            """
+            import atexit
+            from libqtile.core.lifecycle import lifecycle
+            atexit.unregister(lifecycle._atexit)
+            lifecycle._atexit = lambda: None
+            """
+        )
+    )
+
     # Stop the manager
     manager.c.eval("self._do_stop()")
 
     # Manager should have shutdown now so trying to access it will raise an error
     with pytest.raises((IPCError, ConnectionResetError)):
         assert manager.c.status()
+
+    # Wait for the process to fully exit, ensuring X11 properties are cleaned up
+    # in finalize() before starting a new manager.
+    manager.proc.join(10)
 
     # Set up a new manager which takes our state file
     with BareManager(backend, request.config.getoption("--debuglog")) as restarted_manager:
@@ -144,6 +163,16 @@ def test_restart_hook_and_state(manager_nospawn, request, backend, backend_name)
         restarted_manager.c.restart()
         restarted_state = restarted_manager.c.eval("self.lifecycle.state_file")
         assert restarted_state
+        restarted_manager.c.eval(
+            textwrap.dedent(
+                """
+                import atexit
+                from libqtile.core.lifecycle import lifecycle
+                atexit.unregister(lifecycle._atexit)
+                lifecycle._atexit = lambda: None
+                """
+            )
+        )
         restarted_manager.c.eval("self._do_stop()")
 
     # Load the two QtileState objects
