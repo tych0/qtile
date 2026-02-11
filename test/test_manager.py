@@ -956,34 +956,39 @@ def test_focus_stays_on_layout_switch(manager):
     assert manager.c.window.info()["name"] == "one"
 
 
-@manager_config
-def test_hovered_window_updated_on_layout_change(manager):
-    """hovered_window should reflect the actual window under the mouse after layout change."""
+class CursorWarpConfig(ManagerConfig):
+    cursor_warp = True
+
+
+@pytest.mark.parametrize("manager", [CursorWarpConfig], indirect=True)
+def test_cursor_warps_to_focused_window_on_layout_change(manager):
+    """After a layout change the pointer should warp to the focused window.
+
+    Without this, the pointer can end up hovering over a non-focused window
+    after a layout change, causing follow_mouse_focus to steal focus or
+    tools like ``xdotool type`` to target the wrong window.
+    """
     manager.test_window("one")
     manager.test_window("two")
 
     # We start in Stack(num_stacks=1). "two" is focused and covers everything.
-    # Move mouse to the left side of the screen. Since "two" covers the whole
-    # screen, the mouse is over "two".
+    # Move the mouse to the left side of the screen.
     manager.backend.fake_motion(100, 290)
-    assert manager.c.eval("self.hovered_window.name") == "two"
 
     # Switch to Stack(num_stacks=2). Now windows are side by side:
-    # "one" in left column (0-400), "two" in right column (400-800).
-    # Mouse at (100, 290) is now over "one", but without the fix
-    # hovered_window would still say "two".
+    # "one" in left column (~0-400), "two" in right column (~400-800).
+    # With cursor_warp the pointer should be warped to the center of
+    # the focused window ("two") in the right column.
     manager.c.next_layout()
 
-    assert manager.c.eval("self.hovered_window.name") == "one"
-
-    # Focus should remain on "two" (the previously focused window), not be
-    # stolen by follow_mouse_focus due to the layout change.
+    # Focus should still be on "two" -- the pointer warp keeps it there
+    # instead of leaving the pointer over "one" in the left column.
     assert manager.c.window.info()["name"] == "two"
 
-    # Moving the mouse within the same window ("one") should NOT steal focus
-    # to "one" -- follow_mouse_focus should only trigger when the pointer
-    # enters a different window, not for motion within the same window.
-    manager.backend.fake_motion(110, 290)
+    # The pointer should now be within "two"'s geometry, so a small mouse
+    # movement should not change focus.
+    info = manager.c.window.info()
+    manager.backend.fake_motion(info["x"] + 10, info["y"] + 10)
     assert manager.c.window.info()["name"] == "two"
 
 

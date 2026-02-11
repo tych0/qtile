@@ -103,7 +103,7 @@ class _Group(CommandObject):
         self.layout.hide()
         self.current_layout = index % len(self.layouts)
         hook.fire("layout_change", self.layouts[self.current_layout], self)
-        self.layout_all()
+        self.layout_all(warp=True)
         if self.screen is not None:
             screen_rect = self.screen.get_rect()
             self.layout.show(screen_rect)

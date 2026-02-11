@@ -611,24 +611,6 @@ class Core(base.Core):
         yield
         for i in self.qtile.windows_map.values():
             i._reset_mask()
-        # Update hovered_window to reflect current pointer position after
-        # windows may have moved. This matches the Wayland backend which calls
-        # _focus_pointer(motion=False) here.
-        self._update_hovered_window()
-
-    def _update_hovered_window(self):
-        """Update hovered_window based on current pointer position.
-
-        After a layout change, windows may have moved so a different window
-        could be under the pointer. We update hovered_window without triggering
-        follow_mouse_focus, matching the Wayland backend's behavior.
-        """
-        assert self.qtile is not None
-        reply = self.conn.conn.core.QueryPointer(self._root.wid).reply()
-        win = self.qtile.windows_map.get(reply.child)
-        if win is not None and win is not self.qtile.hovered_window:
-            hook.fire("client_mouse_enter", win)
-        self.qtile.hovered_window = win
 
     def create_internal(
         self, x: int, y: int, width: int, height: int, desired_depth: int | None = 32
