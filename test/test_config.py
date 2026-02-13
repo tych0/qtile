@@ -115,11 +115,8 @@ def test_screen_serial_ordering_the_order(manager_nospawn, minimal_conf_noscreen
     assert manager_nospawn.c.screen[1].info()["serial"] == "b"
 
 
-def make_screen(name: str | None = None, serial: str | None = None, text: str = "") -> Screen:
-    screen = Screen(top=Bar([TextBox(text)], 10))
-    screen.name = name
-    screen.serial = serial
-    return screen
+def make_screen(text: str = "") -> Screen:
+    return Screen(top=Bar([TextBox(text)], 10))
 
 
 def test_generate_screens_too_few(manager_nospawn, minimal_conf_noscreen, monkeypatch):
