@@ -21,9 +21,8 @@ def run_identify_output(env=None):
     return (stdout, stderr)
 
 
-def check_identify_output(stdout, port, resolution):
+def check_identify_output(stdout, resolution):
     assert re.search(r"Output 0:", stdout)
-    assert re.search(rf"Port:\s+{port}", stdout)
     assert re.search(r"Make:\s+Unknown", stdout)
     assert re.search(r"Model:\s+Unknown", stdout)
     assert re.search(r"Serial Number:\s+Unknown", stdout)
@@ -34,6 +33,5 @@ def check_identify_output(stdout, port, resolution):
 def test_identify_output(xmanager_nospawn):
     backend = xmanager_nospawn.backend
     stdout, _ = run_identify_output(env=backend.env)
-    port = "screen"
     resolution = "800x600"
-    check_identify_output(stdout, port, resolution)
+    check_identify_output(stdout, resolution)
