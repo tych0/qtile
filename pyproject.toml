@@ -166,3 +166,10 @@ filterwarnings = [
     "error:::test",
     "ignore:::dbus_next",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-timeout>=2.4.0",
+]
