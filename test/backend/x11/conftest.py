@@ -1,4 +1,5 @@
 import contextlib
+import fcntl
 import os
 import subprocess
 
@@ -20,6 +21,33 @@ from test.helpers import (
     Retry,
     TestManager,
 )
+
+
+def find_display():
+    """Find an available X display number.
+
+    Like xcffib.testing.find_display() but also checks for existing X11 Unix
+    sockets, since X servers replace the lock file on startup (breaking flock
+    across fork) but the socket persists while the server runs.
+    """
+    display = 10
+    while True:
+        socket_path = f"/tmp/.X11-unix/X{display}"
+        lock_path = xcffib.testing.lock_path(display)
+        if os.path.exists(socket_path):
+            display += 1
+            continue
+        try:
+            f = open(lock_path, "w+")
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                f.close()
+                raise
+        except OSError:
+            display += 1
+            continue
+        return display, f
 
 
 @Retry(ignore_exceptions=(xcffib.ConnectionException,), return_on_fail=True)
@@ -121,7 +149,7 @@ class Xephyr:
         which is used to setup the instance.
         """
         # get a new display
-        display, self.xephyr_display_file = xcffib.testing.find_display()
+        display, self.xephyr_display_file = find_display()
         self.display = f":{display}"
         self.xephyr_display = self.display
 
@@ -154,7 +182,7 @@ class Xephyr:
             # need to add some x11 auth here for the Xephyr display our xtrace
             # will fail:
             subprocess.check_call(["xauth", "generate", self.xephyr_display])
-            display, self.xtrace_display_file = xcffib.testing.find_display()
+            display, self.xtrace_display_file = find_display()
             self.xtrace_display = f":{display}"
             self.display = self.xtrace_display
             args = [
