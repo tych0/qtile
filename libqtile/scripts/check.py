@@ -173,7 +173,7 @@ def check_config(args):
         if valid:
             print("Your config can be loaded by Qtile.")
         else:
-            sys.exit(
+            print(
                 "Your config is valid python but has type checking errors. This may result in unexpected behaviour."
             )
 
