@@ -114,7 +114,6 @@ class CommandObject(metaclass=abc.ABCMeta):
             super().__new__(cls)
 
         commands = {}
-        cmd_s = set()
 
         # We need to iterate over the class's inherited classes in reverse order
         # We reverse the order so the exposed command will always be the latest
@@ -136,16 +135,6 @@ class CommandObject(metaclass=abc.ABCMeta):
                 for mapping in getattr(method, "_mapping", list()):
                     setattr(cls, mapping, method)
                     commands[mapping] = method
-
-        if cmd_s:
-            names = ", ".join(cmd_s)
-            msg = (
-                f"The use of the 'cmd_' prefix to expose commands via IPC "
-                f"is deprecated. Methods should use the "
-                f"@expose_command() decorator instead. "
-                f"Please update: {names}"
-            )
-            logger.warning("Deprecation Warning: %s", msg)
 
         # Record the object as being parsed.
         cls._command_object = cls.__name__
