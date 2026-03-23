@@ -295,27 +295,6 @@ class Drawer:
     def font_extents(self):
         return self.ctx.font_extents()
 
-    def fit_fontsize(self, heightlimit):
-        """Try to find a maximum font size that fits any strings within the height"""
-        self.ctx.set_font_size(heightlimit)
-        asc, desc, height, _, _ = self.font_extents()
-        self.ctx.set_font_size(int(heightlimit * heightlimit / height))
-        return self.font_extents()
-
-    def fit_text(self, strings, heightlimit):
-        """Try to find a maximum font size that fits all strings within the height"""
-        self.ctx.set_font_size(heightlimit)
-        _, _, _, maxheight, _, _ = self.ctx.text_extents("".join(strings))
-        if not maxheight:
-            return 0, 0
-        self.ctx.set_font_size(int(heightlimit * heightlimit / maxheight))
-        maxwidth, maxheight = 0, 0
-        for i in strings:
-            _, _, x, y, _, _ = self.ctx.text_extents(i)
-            maxwidth = max(maxwidth, x)
-            maxheight = max(maxheight, y)
-        return maxwidth, maxheight
-
     def draw_vbar(self, color, x, y1, y2, linewidth=1):
         self.set_source_rgb(color)
         self.ctx.move_to(x, y1)
@@ -362,7 +341,7 @@ class TextLayout:
             if value is None:
                 value = ""
             try:
-                attrlist, value, accel_char = pangocffi.parse_markup(value)
+                attrlist, value, _ = pangocffi.parse_markup(value)
                 self.layout.set_attributes(attrlist)
             except pangocffi.BadMarkup as e:
                 logger.warning(e)

@@ -25,44 +25,9 @@ if TYPE_CHECKING:
     from libqtile.command.base import ItemT
 
 # ICCM Constants
-NoValue = 0x0000
-XValue = 0x0001
-YValue = 0x0002
-WidthValue = 0x0004
-HeightValue = 0x0008
-AllValues = 0x000F
-XNegative = 0x0010
-YNegative = 0x0020
-
 WithdrawnState = 0
-DontCareState = 0
 NormalState = 1
-ZoomState = 2
 IconicState = 3
-InactiveState = 4
-
-RectangleOut = 0
-RectangleIn = 1
-RectanglePart = 2
-VisualNoMask = 0x0
-VisualIDMask = 0x1
-VisualScreenMask = 0x2
-VisualDepthMask = 0x4
-VisualClassMask = 0x8
-VisualRedMaskMask = 0x10
-VisualGreenMaskMask = 0x20
-VisualBlueMaskMask = 0x40
-VisualColormapSizeMask = 0x80
-VisualBitsPerRGBMask = 0x100
-VisualAllMask = 0x1FF
-ReleaseByFreeingColormap = 1
-BitmapSuccess = 0
-BitmapOpenFailed = 1
-BitmapFileInvalid = 2
-BitmapNoMemory = 3
-XCSUCCESS = 0
-XCNOMEM = 1
-XCNOENT = 2
 
 _NET_WM_STATE_REMOVE = 0
 _NET_WM_STATE_ADD = 1
@@ -2091,9 +2056,7 @@ class Window(_Window, base.Window):
         icon = list(map(ord, icon.value))
 
         icons = {}
-        while True:
-            if not icon:
-                break
+        while icon:
             size = icon[:8]
             if len(size) != 8 or not size[0] or not size[4]:
                 break

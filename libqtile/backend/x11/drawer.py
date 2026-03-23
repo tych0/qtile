@@ -160,12 +160,6 @@ class Drawer(drawer.Drawer):
             self.height if height is None else height,
         )
 
-    def _find_root_visual(self):
-        for i in self.conn.default_screen.allowed_depths:
-            for v in i.visuals:
-                if v.visual_id == self.conn.default_screen.root_visual:
-                    return v
-
     def set_source_rgb(self, colour, ctx=None):
         # Remove transparency from non-32 bit windows
         if utils.has_transparency(colour) and self._depth != 32:

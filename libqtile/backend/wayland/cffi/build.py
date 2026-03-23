@@ -187,12 +187,6 @@ for file in cdef_files:
 SOURCE = "\n".join(f'#include "{header}"' for header in cdef_files) + "\n"
 
 
-def get_include_path(lib: str) -> str:
-    return subprocess.run(
-        ["pkg-config", "--variable=includedir", lib], text=True, stdout=subprocess.PIPE
-    ).stdout.strip()
-
-
 INCLUDE_DIRS = [
     os.getenv("QTILE_CAIRO_PATH", "/usr/include/cairo"),
     os.getenv("QTILE_PIXMAN_PATH", "/usr/include/pixman-1"),
