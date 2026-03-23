@@ -60,8 +60,7 @@ def get_default_log() -> Path:
         # if variable wasn't set
         data_directory = os.path.expanduser("~/.local/share")
 
-    qtile_directory = Path(data_directory) / "qtile"
-    return qtile_directory / "qtile.log"
+    return Path(data_directory) / "qtile" / "qtile.log"
 
 
 def init_log(

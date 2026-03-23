@@ -83,8 +83,7 @@ class QSh:
     def _complete(self, buf, arg) -> list[str]:
         if not re.search(r" |\(", buf) or buf.startswith("help "):
             options = self._builtins + self._command_client.commands
-            lst = [i for i in options if i.startswith(arg)]
-            return lst
+            return [i for i in options if i.startswith(arg)]
         elif buf.startswith(("cd ", "ls ")):
             path, sep, last = arg.rpartition("/")
             node, rest_path = self._find_path(path)
@@ -317,8 +316,7 @@ class QSh:
             args = builtin_match.group("arg")
             if cmd in self._builtins:
                 builtin = getattr(self, "do_" + cmd)
-                val = builtin(args)
-                return val
+                return builtin(args)
             else:
                 return f"Invalid builtin: {cmd}"
 

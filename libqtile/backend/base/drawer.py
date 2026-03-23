@@ -393,8 +393,7 @@ class TextLayout:
 
     @property
     def font_family(self):
-        d = self.fontdescription()
-        return d.get_family()
+        return self.fontdescription().get_family()
 
     @font_family.setter
     def font_family(self, font):

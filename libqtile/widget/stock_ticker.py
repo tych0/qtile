@@ -44,8 +44,7 @@ class StockTicker(GenPollUrl):
 
     @property
     def url(self):
-        url = "https://www.alphavantage.co/query?" + urlencode(self.query)
-        return url
+        return "https://www.alphavantage.co/query?" + urlencode(self.query)
 
     def parse(self, body):
         last = None
