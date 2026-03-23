@@ -173,7 +173,7 @@ class Node:
     @property
     def siblings(self):
         if self.is_root:
-            return list()
+            return []
         return [c for c in self.parent if c is not self]
 
     @property
@@ -887,16 +887,10 @@ class Plasma(Layout):
             return True
 
         if self.add_mode is not None:
-            if self.add_mode & AddMode.HORIZONTAL:
-                return True
-            else:
-                return False
+            return bool(self.add_mode & AddMode.HORIZONTAL)
 
         if self.focused_node.parent is None:
-            if self.focused_node.orient is Orient.HORIZONTAL:
-                return True
-            else:
-                return False
+            return self.focused_node.orient is Orient.HORIZONTAL
 
         return self.focused_node.parent.horizontal
 

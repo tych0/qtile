@@ -120,7 +120,7 @@ class CommandObject(metaclass=abc.ABCMeta):
         # We reverse the order so the exposed command will always be the latest
         # definition of the method.
         for c in reversed(list(cls.__mro__)):
-            for method_name in list(c.__dict__.keys()):
+            for method_name in c.__dict__:
                 method = getattr(c, method_name, None)
 
                 if method is None:

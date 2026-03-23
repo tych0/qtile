@@ -173,7 +173,7 @@ SUPPORTED_ATOMS = [
     "_NET_WM_STRUT_PARTIAL",
     "_NET_WM_PID",
 ]
-SUPPORTED_ATOMS.extend(WindowTypes.keys())
+SUPPORTED_ATOMS.extend(WindowTypes)
 SUPPORTED_ATOMS.extend(net_wm_states)
 
 XCB_CONN_ERRORS = {
@@ -281,7 +281,7 @@ class AtomCache:
         self.reverse = {}
 
         # We can change the pre-loads not to wait for a return
-        for name in WindowTypes.keys():
+        for name in WindowTypes:
             self.insert(name=name)
 
         for i in dir(xcffib.xproto.Atom):

@@ -358,7 +358,7 @@ def lift_args(cmd, args, kwargs):
 
     params = typing.get_type_hints(cmd, globalns=globals())
 
-    non_return_annotated_args = filter(lambda k: k != "return", params.keys())
+    non_return_annotated_args = filter(lambda k: k != "return", params)
     for param, arg in zip(non_return_annotated_args, args):
         converted_args.append(lift_arg(params[param], arg))
 

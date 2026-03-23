@@ -173,7 +173,7 @@ class GroupCompleter(AbstractCompleter):
         txt = txt.lower()
         if not self.lookup:
             self.lookup = []
-            for group in self.qtile.groups_map.keys():
+            for group in self.qtile.groups_map:
                 if group.lower().startswith(txt):
                     self.lookup.append((group, group))
 

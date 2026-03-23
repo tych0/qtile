@@ -425,10 +425,7 @@ async def _send_dbus_message(
     Returns a tuple of the bus object and message response.
     """
     if bus is None:
-        if session_bus:
-            bus_type = BusType.SESSION
-        else:
-            bus_type = BusType.SYSTEM
+        bus_type = BusType.SESSION if session_bus else BusType.SYSTEM
 
         try:
             bus = await MessageBus(

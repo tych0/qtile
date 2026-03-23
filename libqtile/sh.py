@@ -131,10 +131,7 @@ class QSh:
         if object_type is not None:
             allow_root, items = client.items(object_type)
             str_items = [str(i) for i in items]
-            if allow_root:
-                children = client.navigate(object_type, None).children
-            else:
-                children = []
+            children = client.navigate(object_type, None).children if allow_root else []
             return children, str_items
         else:
             return client.children, []

@@ -181,6 +181,6 @@ class KeyboardLayout(base.InLoopPollText):
 
     def poll(self):
         keyboard = self.backend.get_keyboard()
-        if keyboard in self.display_map.keys():
+        if keyboard in self.display_map:
             return self.display_map[keyboard]
         return keyboard.upper()

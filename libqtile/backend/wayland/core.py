@@ -195,10 +195,7 @@ def add_idle_inhibitor_cb(
     is_session_lock_surface: bool,
 ) -> bool:
     core = ffi.from_handle(userdata)
-    if view != ffi.NULL:
-        window = ffi.from_handle(view)
-    else:
-        window = None
+    window = ffi.from_handle(view) if view != ffi.NULL else None
     return core.handle_new_idle_inhibitor(
         inhibitor, window, is_layer_surface, is_session_lock_surface
     )
@@ -299,7 +296,7 @@ class Core(base.Core):
     def new_wid(self) -> int:
         """Get a new unique window ID"""
         assert self.qtile is not None
-        return max(self.qtile.windows_map.keys(), default=0) + 1
+        return max(self.qtile.windows_map, default=0) + 1
 
     # Callback to fetch qtile config parameters from wayc
     # Add additional parameters as needed (server.h: struct qw_qtile_config)

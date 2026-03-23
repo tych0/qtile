@@ -225,7 +225,7 @@ class CurrentLayout(base._TextBox):
             # the second is the class name. If these are the same (i.e. the user hasn't
             # set a name) then there is only one key in the dictionary.
             layouts = dict.fromkeys(names)
-            for layout in layouts.keys():
+            for layout in layouts:
                 icon_file_path = self.find_icon_file_path(layout)
                 if icon_file_path:
                     break

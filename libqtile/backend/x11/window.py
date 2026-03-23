@@ -673,10 +673,7 @@ class _Window:
 
     @expose_command()
     def info(self):
-        if self.group:
-            group = self.group.name
-        else:
-            group = None
+        group = self.group.name if self.group else None
         float_info = {
             "x": self.float_x,
             "y": self.float_y,
@@ -944,10 +941,7 @@ class _Window:
         active_window = self.qtile.core._root.get_property(
             "_NET_ACTIVE_WINDOW", "WINDOW", unpack=int
         )
-        if active_window and active_window[0] == self.window.wid:
-            focus = True
-        else:
-            focus = False
+        focus = bool(active_window and active_window[0] == self.window.wid)
 
         desktop = _type == "desktop"
         below = "_NET_WM_STATE_BELOW" in state
@@ -1367,9 +1361,7 @@ class _Window:
         props = self.window.list_properties()
         normalhints = self.window.get_wm_normal_hints()
         hints = self.window.get_wm_hints()
-        protocols = []
-        for i in self.window.get_wm_protocols():
-            protocols.append(i)
+        protocols = list(self.window.get_wm_protocols())
 
         state = self.window.get_wm_state()
 

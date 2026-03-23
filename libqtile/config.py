@@ -1085,10 +1085,7 @@ class Match(_Match):
                 wm_class = client.get_wm_class()
                 if not wm_class:
                     return False
-                if property_name == "wm_instance_class":
-                    value = wm_class[0]
-                else:
-                    value = wm_class
+                value = wm_class[0] if property_name == "wm_instance_class" else wm_class
             elif property_name == "role":
                 value = client.get_wm_role()
             elif property_name == "func":

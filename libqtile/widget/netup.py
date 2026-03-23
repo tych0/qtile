@@ -36,7 +36,7 @@ class NetUP(base.BackgroundPoll):
         return True
 
     def validate_method(self):
-        if self.method == "ping" or self.method == "tcp":
+        if self.method in ("ping", "tcp"):
             return True
         logger.error("Method is invalid")
         return False
@@ -45,11 +45,10 @@ class NetUP(base.BackgroundPoll):
         if not isinstance(self.port, int):
             logger.error("Port is invalid")
             return False
-        if self.port >= 1 and self.port <= 65535:
+        if 1 <= self.port <= 65535:
             return True
-        else:
-            logger.error("Port is invalid")
-            return False
+        logger.error("Port is invalid")
+        return False
 
     def check_ping(self):
         process = run(["ping", "-c", "1", self.host], stdout=DEVNULL, stderr=DEVNULL)
@@ -68,13 +67,9 @@ class NetUP(base.BackgroundPoll):
 
     def is_up(self):
         if self.method == "ping":
-            if self.check_ping() == 0:
-                return True
-            return False
+            return self.check_ping() == 0
         if self.method == "tcp":
-            if self.check_tcp() == 0:
-                return True
-            return False
+            return self.check_tcp() == 0
 
     def poll(self):
         if (

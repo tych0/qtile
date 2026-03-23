@@ -107,10 +107,7 @@ class DGroups:
             self.add_dgroup(group, group.init)
 
             if group.spawn and not self.qtile.no_spawn:
-                if isinstance(group.spawn, str):
-                    spawns = [group.spawn]
-                else:
-                    spawns = group.spawn
+                spawns = [group.spawn] if isinstance(group.spawn, str) else group.spawn
                 for spawn in spawns:
                     libqtile.hook.subscribe.startup_once(launch_app(spawn, group=group.name))
 

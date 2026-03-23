@@ -691,7 +691,7 @@ class Qtile(CommandObject):
         screen_affinity: int | None = None,
         persist: bool | None = False,
     ) -> bool:
-        if name not in self.groups_map.keys():
+        if name not in self.groups_map:
             g = _Group(
                 name, layout, label=label, screen_affinity=screen_affinity, persist=persist
             )
@@ -716,7 +716,7 @@ class Qtile(CommandObject):
         if len(self.groups) == len(self.screens):
             raise ValueError("Can't delete all groups.")
 
-        if name in self.groups_map.keys():
+        if name in self.groups_map:
             group = self.groups_map[name]
 
             # Find a group that's not currently on a screen to bring to the front.

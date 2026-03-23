@@ -72,7 +72,7 @@ class Config:
             self.fake_screens = fake_screens
 
         default = vars(default_config)
-        for key in self.__annotations__.keys():
+        for key in self.__annotations__:
             try:
                 value = settings[key]
             except KeyError:
