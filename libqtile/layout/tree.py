@@ -466,11 +466,7 @@ class TreeTab(Layout):
             self._drawer.finalize()
 
     def get_windows(self):
-        return [
-            window.window
-            for section in self._tree.children
-            for window in section.children
-        ]
+        return [window.window for section in self._tree.children for window in section.children]
 
     @expose_command()
     def info(self) -> dict[str, Any]:

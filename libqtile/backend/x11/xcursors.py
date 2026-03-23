@@ -137,5 +137,7 @@ class Cursors(dict):
         return cursor
 
     def _new(self, name, cursor_font):
-        cursor = self.get_xcursor(name) if self.xcursor else self.get_font_cursor(name, cursor_font)
+        cursor = (
+            self.get_xcursor(name) if self.xcursor else self.get_font_cursor(name, cursor_font)
+        )
         self[name.decode()] = cursor
