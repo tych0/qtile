@@ -1,4 +1,5 @@
 import contextlib
+import fcntl
 import os
 import subprocess
 
@@ -22,6 +23,39 @@ from test.helpers import (
 )
 
 
+def _qtile_lock_path(display):
+    """Lock file path that X servers won't overwrite.
+
+    xcffib.testing.find_display() uses /tmp/.X{n}-lock, but X servers (Xvfb,
+    Xephyr) delete and recreate that file with their PID, invalidating the
+    flock on the original inode. We use a separate path so our locks survive.
+    """
+    return f"/tmp/.qtile-test-X{display}-lock"
+
+
+def find_display():
+    """Find a free X display number using robust file locking.
+
+    Unlike xcffib.testing.find_display(), this uses a lock path that X servers
+    don't touch, so the lock remains valid even after the server starts.
+    """
+    display = 10
+    while True:
+        lock_path = _qtile_lock_path(display)
+        try:
+            f = open(lock_path, "w+")
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                f.close()
+                display += 1
+                continue
+        except OSError:
+            display += 1
+            continue
+        return display, f
+
+
 @Retry(ignore_exceptions=(xcffib.ConnectionException,), return_on_fail=True)
 def can_connect_x11(disp=":0", *, ok=None):
     if ok is not None and not ok():
@@ -34,18 +68,41 @@ def can_connect_x11(disp=":0", *, ok=None):
 
 @contextlib.contextmanager
 def xvfb():
-    with xcffib.testing.XvfbTest():
-        display = os.environ["DISPLAY"]
-        if not can_connect_x11(display):
-            raise OSError("Xvfb did not come up")
-
-        yield
+    display, display_lock = find_display()
+    display_str = f":{display}"
+    xvfb_proc = subprocess.Popen(
+        ["Xvfb", display_str, "-screen", "0", "800x600x16"]
+    )
+    try:
+        old_display = os.environ.get("DISPLAY")
+        os.environ["DISPLAY"] = display_str
+        try:
+            if not can_connect_x11(display_str):
+                raise OSError("Xvfb did not come up")
+            yield display_str
+        finally:
+            if old_display is None:
+                os.environ.pop("DISPLAY", None)
+            else:
+                os.environ["DISPLAY"] = old_display
+    finally:
+        xvfb_proc.kill()
+        xvfb_proc.wait()
+        try:
+            os.remove(xcffib.testing.lock_path(display))
+        except OSError:
+            pass
+        try:
+            display_lock.close()
+            os.remove(_qtile_lock_path(display))
+        except OSError:
+            pass
 
 
 @pytest.fixture(scope="session")
 def display():  # noqa: F841
-    with xvfb():
-        yield os.environ["DISPLAY"]
+    with xvfb() as disp:
+        yield disp
 
 
 def start_x11_and_poll_connection(args, display):
@@ -63,7 +120,7 @@ def start_x11_and_poll_connection(args, display):
         )
 
 
-def stop_x11(proc, display, display_file):
+def stop_x11(proc, display, display_lock):
     # Kill xephyr only if it is running
     if proc is not None:
         if proc.poll() is None:
@@ -71,11 +128,17 @@ def stop_x11(proc, display, display_file):
         proc.wait()
 
     # clean up the lock file for the display we allocated
-    try:
-        display_file.close()
-        os.remove(xcffib.testing.lock_path(int(display[1:])))
-    except OSError:
-        pass
+    if display is not None:
+        try:
+            os.remove(xcffib.testing.lock_path(int(display[1:])))
+        except OSError:
+            pass
+    if display_lock is not None:
+        try:
+            display_lock.close()
+            os.remove(_qtile_lock_path(int(display[1:])))
+        except OSError:
+            pass
 
 
 class Xephyr:
@@ -121,7 +184,7 @@ class Xephyr:
         which is used to setup the instance.
         """
         # get a new display
-        display, self.xephyr_display_file = xcffib.testing.find_display()
+        display, self.xephyr_display_file = find_display()
         self.display = f":{display}"
         self.xephyr_display = self.display
 
@@ -147,14 +210,14 @@ class Xephyr:
             args.extend(["+xinerama"])
             args.extend(["-extension", "RANDR"])
 
-        start_x11_and_poll_connection(args, self.xephyr_display)
+        self.proc = start_x11_and_poll_connection(args, self.xephyr_display)
 
         if self.xtrace:
             # because we run Xephyr without auth and xtrace requires auth, we
             # need to add some x11 auth here for the Xephyr display our xtrace
             # will fail:
             subprocess.check_call(["xauth", "generate", self.xephyr_display])
-            display, self.xtrace_display_file = xcffib.testing.find_display()
+            display, self.xtrace_display_file = find_display()
             self.xtrace_display = f":{display}"
             self.display = self.xtrace_display
             args = [
@@ -166,7 +229,7 @@ class Xephyr:
                 "-D",
                 self.xtrace_display,
             ]
-            start_x11_and_poll_connection(args, self.xtrace_display)
+            self.xtrace_proc = start_x11_and_poll_connection(args, self.xtrace_display)
 
     def stop_xephyr(self):
         stop_x11(self.proc, self.xephyr_display, self.xephyr_display_file)
