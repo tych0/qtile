@@ -26,6 +26,7 @@ class Core(CommandObject, metaclass=ABCMeta):
     qtile: Qtile
     idle_inhibitor_manager: IdleInhibitorManager[Any]
     idle_notifier: IdleNotifier
+    child_env: dict[str, str]
 
     @property
     @abstractmethod

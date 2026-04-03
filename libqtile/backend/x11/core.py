@@ -83,6 +83,7 @@ class Core(base.Core):
             if not display_name:
                 raise QtileError("No DISPLAY set")
 
+        self.child_env = {}
         self.conn = xcbq.Connection(display_name)
         self._display_name = display_name
 

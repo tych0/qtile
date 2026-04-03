@@ -252,9 +252,12 @@ class Core(base.Core):
         if not self.qw:
             sys.exit(1)
 
+        self.child_env: dict[str, str] = {}
         xwayland_display_name_ptr = lib.qw_server_xwayland_display_name(self.qw)
         if xwayland_display_name_ptr != ffi.NULL:
-            os.environ["DISPLAY"] = ffi.string(xwayland_display_name_ptr).decode()
+            xwayland_display = ffi.string(xwayland_display_name_ptr).decode()
+            os.environ["DISPLAY"] = xwayland_display
+            self.child_env["DISPLAY"] = xwayland_display
         self._output_reserved_space: dict[Screen, tuple[int, int, int, int]] = {}
         self.current_window = None
         self.grabbed_keys: list[tuple[int, int]] = []
@@ -280,6 +283,7 @@ class Core(base.Core):
         self.qw.idle_state_change_cb = lib.idle_state_change_cb
         lib.qw_server_start(self.qw)
         os.environ["WAYLAND_DISPLAY"] = self.display_name
+        self.child_env["WAYLAND_DISPLAY"] = self.display_name
         self.qw_cursor = lib.qw_server_get_cursor(self.qw)
 
         self.painter = Painter(self)
@@ -319,14 +323,13 @@ class Core(base.Core):
         if self.qtile.config.wl_input_rules:
             inputs.configure_input_devices(self.qw, self.qtile.config.wl_input_rules)
 
-        # Set xcursor environment variables from Python before calling into C.
-        # This avoids calling setenv() from C code, which is not thread-safe with
-        # respect to getenv() calls that may happen concurrently (e.g. from
-        # fontconfig/pango initialization in a glib worker thread). See #5818.
-        os.environ["XCURSOR_SIZE"] = str(self.qtile.config.wl_xcursor_size)
+        # Store xcursor settings for child process inheritance via spawn().
+        # The C code reads these values from the config callback, not from
+        # environment variables.
+        self.child_env["XCURSOR_SIZE"] = str(self.qtile.config.wl_xcursor_size)
         theme = self.qtile.config.wl_xcursor_theme
         if theme is not None:
-            os.environ["XCURSOR_THEME"] = theme
+            self.child_env["XCURSOR_THEME"] = theme
 
         # Apply xcursor settings
         lib.qw_cursor_configure_xcursor(self.qw_cursor)

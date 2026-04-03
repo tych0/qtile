@@ -1411,6 +1411,7 @@ class Qtile(CommandObject):
             # applications, since it may change e.g. the behavior
             # of shells that spawn python applications
             env.pop("VIRTUAL_ENV", None)
+        env.update(self.core.child_env)
 
         # std{in,out,err} should be /dev/null
         with open("/dev/null") as null:
