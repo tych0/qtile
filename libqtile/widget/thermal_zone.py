@@ -2,7 +2,7 @@ from libqtile.log_utils import logger
 from libqtile.widget import base
 
 
-class ThermalZone(base.InLoopPollText):
+class ThermalZone(base.BackgroundPoll):
     """Thermal zone widget.
 
     This widget was made to read thermal zone files and transform values to
@@ -28,10 +28,14 @@ class ThermalZone(base.InLoopPollText):
         super().__init__("", **config)
         self.add_defaults(ThermalZone.defaults)
 
-    def poll(self):
+    def _read_zone(self):
+        with open(self.zone) as f:
+            return f.read().rstrip()
+
+    async def apoll(self):
         try:
-            with open(self.zone) as f:
-                value = round(int(f.read().rstrip()) / 1000)
+            raw = await self.qtile.run_in_executor(self._read_zone)
+            value = round(int(raw) / 1000)
         except OSError:
             logger.exception("%s does not exist", self.zone)
             return "err!"
