@@ -622,15 +622,19 @@ class Core(base.Core):
         y: int,
         width: int,
         height: int,
+        depth: int = 32,
     ) -> base.Internal:
         assert self.qtile is not None
 
-        # Try to use a 32-bit depth to allow for transparent colors in
-        # backgrounds. If the Screen doesn't support 32-bit visuals, the code
-        # in create_window() -> _get_depth_and_visual() will fall back to an
-        # appropriate depth.
-        win = self.conn.create_window(x, y, width, height, desired_depth=32)
-        internal = window.Internal(win, self.qtile, desired_depth=32)
+        # When the caller asks for a 32-bit visual, we want an ARGB visual to
+        # support transparent colors. Otherwise fall back to the root's depth,
+        # which is always usable for CreateWindow; some X servers (e.g. Xephyr
+        # hosted on a 16-bit Xvfb) advertise non-root depths that can't actually
+        # be used for core window creation.
+        if depth != 32:
+            depth = self.conn.default_screen.root_depth
+        win = self.conn.create_window(x, y, width, height, desired_depth=depth)
+        internal = window.Internal(win, self.qtile, desired_depth=depth)
 
         internal.place(x, y, width, height, 0, None)
         self.qtile.manage(internal)
