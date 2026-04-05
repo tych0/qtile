@@ -484,3 +484,26 @@ def test_decorators_manager_call(manager):
 def test_eval_exception(manager):
     with pytest.raises(CommandException):
         manager.c.eval("raise Exception")
+
+
+def test_lift_args_uses_command_globals():
+    """
+    Regression test for #5893 / #5898: lift_args must resolve type annotations
+    using the command's own module globals so that structural types referenced
+    only inside the annotation (e.g. ``Sequence[str | PathLike]`` on
+    ``Qtile.spawn``) can be evaluated at IPC lift time.
+    """
+    from libqtile.command.interface import lift_args
+    from libqtile.core.manager import Qtile
+
+    # The spawn signature is ``list[str] | str | Sequence[str | PathLike]``.
+    # Before the fix, resolving the annotation used ``interface.py``'s globals,
+    # which don't have ``Sequence`` / ``PathLike``, and this raised NameError.
+    args, kwargs = lift_args(Qtile.spawn, ("xterm",), {})
+    assert args == ("xterm",)
+    assert kwargs == {}
+
+    # shell=bool kwarg is still correctly lifted from its string form
+    args, kwargs = lift_args(Qtile.spawn, ("xterm",), {"shell": "True"})
+    assert args == ("xterm",)
+    assert kwargs == {"shell": True}
