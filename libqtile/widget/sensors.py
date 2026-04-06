@@ -76,8 +76,8 @@ class ThermalSensor(base.BackgroundPoll):
 
         return temperature_list
 
-    def poll(self):
-        temp_values = self.get_temp_sensors()
+    async def apoll(self):
+        temp_values = await self.qtile.run_in_executor(self.get_temp_sensors)
 
         # Temperature not available
         if (temp_values is None) or (self.tag_sensor not in temp_values):
