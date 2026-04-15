@@ -40,7 +40,7 @@ class CmdPrefixTransformer(MigrationTransformer):
             replacement = MIGRATION_MAP[name]
 
         else:
-            replacement = name[4:]
+            replacement = name.removeprefix("cmd_")
 
         self.lint(
             original_node,

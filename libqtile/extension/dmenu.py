@@ -147,7 +147,7 @@ class J4DmenuDesktop(Dmenu):
         self.configured_command = [
             self.j4dmenu_command,
             "--dmenu",
-            " ".join(shlex.quote(arg) for arg in self.configured_command),
+            shlex.join(self.configured_command),
         ]
         if self.j4dmenu_use_xdg_de:
             self.configured_command.append("--use-xdg-de")

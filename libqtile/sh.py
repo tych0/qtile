@@ -66,7 +66,7 @@ class QSh:
         self.readline = import_module("readline")
         self._command_client = CommandClient(client)
         self._completekey = completekey
-        self._builtins = [i[3:] for i in dir(self) if i.startswith("do_")]
+        self._builtins = [i.removeprefix("do_") for i in dir(self) if i.startswith("do_")]
 
     def complete(self, arg, state) -> str | None:
         buf = self.readline.get_line_buffer()
