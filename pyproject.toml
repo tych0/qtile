@@ -151,6 +151,27 @@ no_implicit_optional = true
 disallow_untyped_defs = false
 disable_error_code = ["method-assign", "annotation-unchecked"]
 
+# The _ffi module is generated at build time by cffi and is not available
+# during static type-checking, but every import site has a runtime fallback
+# to libqtile.backend.wayland.ffi_stub.
+[[tool.mypy.overrides]]
+module = "libqtile.backend.wayland._ffi"
+ignore_missing_imports = true
+
+# Optional third-party dependencies that not all dev environments (or
+# pre-commit CI runs) have installed. Each import site already fails
+# gracefully at runtime when the dep is missing.
+[[tool.mypy.overrides]]
+module = [
+    "libcst.*",
+    "isort",
+    "aiohttp",
+    "prompt_toolkit.*",
+    "setuptools",
+    "setuptools.command.build_ext",
+]
+ignore_missing_imports = true
+
 [tool.vulture]
 paths = ["libqtile"]
 exclude = ["test/configs/syntaxerr.py"]

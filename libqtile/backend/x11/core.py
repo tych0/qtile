@@ -415,6 +415,10 @@ class Core(base.Core):
         elif hasattr(event, "drawable"):
             window = self.qtile.windows_map.get(event.drawable)
         elif event.__class__ in event_events:
+            # The events in event_events all carry the window id in an "event"
+            # attribute, but mypy can't narrow the type based on class
+            # membership, so assert-narrow with hasattr.
+            assert hasattr(event, "event")
             window = self.qtile.windows_map.get(event.event)
         else:
             window = None
