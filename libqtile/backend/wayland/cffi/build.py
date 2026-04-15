@@ -1,11 +1,10 @@
 import argparse
+import contextlib
 import glob
 import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 
 from cffi import FFI
@@ -243,16 +242,6 @@ if not wlroots_has_xwayland():
 OBJECTS = [Path(src).parent / "build" / Path(src).with_suffix(".o").name for src in SOURCE_FILES]
 
 
-@contextmanager
-def chdir(path: Path) -> Iterator[None]:
-    prev_cwd = os.getcwd()
-    try:
-        os.chdir(path)
-        yield
-    finally:
-        os.chdir(prev_cwd)
-
-
 MACROS: list[tuple[str, str | None]] = [("WLR_USE_UNSTABLE", None)]
 if not wlroots_has_xwayland():
     MACROS.append(("WLR_HAS_XWAYLAND", "0"))
@@ -260,7 +249,7 @@ if not wlroots_has_xwayland():
 
 def build_objects(debug: bool = False, asan: bool = False) -> None:
     # We have to use relative paths here for output_dir to work as expected
-    with chdir(QW_PATH):
+    with contextlib.chdir(QW_PATH):
         dist = Distribution()
         cmd = build_ext(dist)
         cmd.setup_shlib_compiler()

@@ -169,7 +169,7 @@ class Bluez:
         # Request the service name
         await bus.request_name(BLUEZ_SERVICE)
 
-        await asyncio.get_event_loop().create_future()
+        await asyncio.get_running_loop().create_future()
 
     def run(self):
         loop = asyncio.new_event_loop()
