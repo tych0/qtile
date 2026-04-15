@@ -35,7 +35,8 @@ class LoopContext(contextlib.AbstractAsyncContextManager):
         await self._cancel_all_tasks()
 
         loop = asyncio.get_running_loop()
-        map(loop.remove_signal_handler, self._signals.keys())
+        for sig in self._signals:
+            loop.remove_signal_handler(sig)
         loop.set_exception_handler(None)
 
     async def _cancel_all_tasks(self) -> None:
