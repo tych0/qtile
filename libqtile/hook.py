@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 subscriptions = {}  # type: dict
 
 
-def clear():
+def clear() -> None:
     subscriptions.clear()
 
 
@@ -82,7 +82,7 @@ class Hook:
 
 
 class HookHandlerCollection:
-    def __init__(self, registry_name: str, check_name=True):
+    def __init__(self, registry_name: str, check_name: bool = True) -> None:
         self.hooks: dict[str, HookHandler] = {}
         if check_name and registry_name in subscriptions:
             raise NameError(f"A hook registry already exists with that name: {registry_name}")
@@ -149,7 +149,7 @@ class Registry:
         self.subscribe._register(hook)
         self.unsubscribe._register(hook)
 
-    def fire(self, event, *args, **kwargs):
+    def fire(self, event: str, *args, **kwargs) -> None:
         if event not in self.subscribe.hooks:
             raise utils.QtileError(f"Unknown event: {event}")
         # Do not fire for Internal windows

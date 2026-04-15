@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
     from libqtile.command.graph import SelectorType
     from libqtile.config import _Match
+    from libqtile.core.manager import Qtile
 
 
 class LazyCall:
@@ -81,7 +82,7 @@ class LazyCall:
         if_no_focused: bool = False,
         layout: Iterable[str] | str | None = None,
         when_floating: bool | None = None,
-        func: Callable | None = None,
+        func: Callable[[], bool] | None = None,
         condition: bool | None = None,
     ) -> LazyCall:
         """Enable call only for matching criteria.
@@ -125,7 +126,7 @@ class LazyCall:
         self._when_floating = when_floating
         return self
 
-    def check(self, q) -> bool:
+    def check(self, q: Qtile) -> bool:
         cur_win_floating = q.current_window and q.current_window.floating
 
         if self._condition is False:

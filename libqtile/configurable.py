@@ -16,7 +16,7 @@ class Configurable:
         # on __init__
         self._variable_defaults.update((d[0], copy.copy(d[1])) for d in defaults)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str):
         if name == "_variable_defaults":
             raise AttributeError
         found, value = self._find_default(name)
@@ -27,7 +27,7 @@ class Configurable:
             cname = self.__class__.__name__
             raise AttributeError(f"{cname} has no attribute: {name}")
 
-    def _find_default(self, name):
+    def _find_default(self, name: str):
         """Returns a tuple (found, value)"""
         defaults = self._variable_defaults.copy()
         defaults.update(self.global_defaults)
@@ -44,12 +44,12 @@ class ExtraFallback:
     Used to look up a different attribute name
     """
 
-    def __init__(self, name, fallback):
+    def __init__(self, name: str, fallback: str) -> None:
         self.name = name
         self.hidden_attribute = "_" + name
         self.fallback = fallback
 
-    def __get__(self, instance, owner=None):
+    def __get__(self, instance: Configurable, owner: type | None = None):
         retval = getattr(instance, self.hidden_attribute, None)
 
         if retval is None:
@@ -60,6 +60,6 @@ class ExtraFallback:
 
         return retval
 
-    def __set__(self, instance, value):
+    def __set__(self, instance: Configurable, value) -> None:
         """Set own value to a hidden attribute of the object"""
         setattr(instance, self.hidden_attribute, value)
