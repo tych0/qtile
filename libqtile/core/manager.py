@@ -230,6 +230,14 @@ class Qtile(CommandObject):
         """
         self._eventloop = asyncio.get_running_loop()
         self.core.qtile = self
+
+        # Surface a CheckLogs widget in every bar whenever a warning (or
+        # higher) log message is emitted. Installed here so the handler has
+        # access to a running event loop for scheduling the widget injection.
+        from libqtile.widget.check_logs import install_handler
+
+        install_handler(self)
+
         self.load_config(initial=True)
         self.core.setup_listener()
 

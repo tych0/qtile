@@ -13,6 +13,17 @@ if typing.TYPE_CHECKING:
 
 logger = getLogger(__package__)
 
+# The path of the current log file, set by ``init_log``. ``None`` when logging
+# goes to stdout (e.g. during tests or Xephyr development). Accessed by
+# widgets/tooling that want to tell the user where to look.
+_log_path: Path | None = None
+
+
+def get_log_path() -> Path | None:
+    """Return the path of the currently active log file, or ``None`` if logging
+    is not going to a file (e.g. stdout during tests)."""
+    return _log_path
+
 
 class ColorFormatter(Formatter):
     """Logging formatter adding console colors to the output."""
@@ -71,6 +82,8 @@ def init_log(
     log_numbackups: int = 1,
     logger: Logger = logger,
 ) -> None:
+    global _log_path
+
     for handler in logger.handlers:
         logger.removeHandler(handler)
 
@@ -81,6 +94,7 @@ def init_log(
             "$RESET$COLOR%(asctime)s $BOLD$COLOR%(name)s "
             "%(filename)s:%(funcName)s():L%(lineno)d $RESET %(message)s"
         )
+        _log_path = None
 
     else:
         # Otherwise during normal usage, log to file.
@@ -100,6 +114,7 @@ def init_log(
             "%(asctime)s %(levelname)s %(name)s "
             "%(filename)s:%(funcName)s():L%(lineno)d %(message)s"
         )
+        _log_path = log_path
 
     handler.setFormatter(formatter)
     logger.addHandler(handler)

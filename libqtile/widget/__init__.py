@@ -11,6 +11,7 @@ widgets = {
     "CPUGraph": "graph",
     "Canto": "canto",
     "CapsNumLockIndicator": "caps_num_lock_indicator",
+    "CheckLogs": "check_logs",
     "CheckUpdates": "check_updates",
     "Chord": "chord",
     "Clipboard": "clipboard",
