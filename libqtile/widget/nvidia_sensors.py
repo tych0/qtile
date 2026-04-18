@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import re
 
@@ -44,24 +45,36 @@ class NvidiaSensors(base.BackgroundPoll):
         self.add_defaults(NvidiaSensors.defaults)
         self.foreground_normal = self.foreground
 
-    def _get_sensors_data(self, command):
-        return csv.reader(
-            self.call_process(command, shell=True).strip().replace(" ", "").split("\n")
+    async def _run_nvidia_smi(self, args):
+        proc = await asyncio.create_subprocess_exec(
+            "nvidia-smi",
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
         )
+        stdout, _ = await proc.communicate()
+        return stdout.decode()
+
+    def _parse_sensors_data(self, output):
+        return csv.reader(output.strip().replace(" ", "").split("\n"))
 
     def _parse_format_string(self):
         return {sensor for sensor in re.findall("{(.+?)}", self.format)}
 
-    def poll(self):
+    async def apoll(self):
         sensors = self._parse_format_string()
         if not _all_sensors_names_correct(sensors):
             return "Wrong sensor name"
-        bus_id = f"-i {self.gpu_bus_id}" if self.gpu_bus_id else ""
-        command = "nvidia-smi {} --query-gpu={} --format=csv,noheader".format(
-            bus_id, ",".join(sensors_mapping[sensor] for sensor in sensors)
-        )
+        args = []
+        if self.gpu_bus_id:
+            args += ["-i", self.gpu_bus_id]
+        args += [
+            f"--query-gpu={','.join(sensors_mapping[sensor] for sensor in sensors)}",
+            "--format=csv,noheader",
+        ]
         try:
-            sensors_data = [dict(zip(sensors, gpu)) for gpu in self._get_sensors_data(command)]
+            output = await self._run_nvidia_smi(args)
+            sensors_data = [dict(zip(sensors, gpu)) for gpu in self._parse_sensors_data(output)]
             for gpu in sensors_data:
                 if gpu.get("temp"):
                     if int(gpu["temp"]) > self.threshold:
