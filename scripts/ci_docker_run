@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# Build the qtile CI docker image and run the test suite inside it.
+#
+# This is the single entry point for CI: GitHub Actions runs exactly this
+# script, and developers can run it locally against their own docker daemon
+# to reproduce a CI failure without touching their host environment.
+#
+# Usage:
+#     scripts/ci_docker_run <python-version> <backend>
+#
+# Examples:
+#     scripts/ci_docker_run 3.13 x11
+#     scripts/ci_docker_run 3.14 wayland
+
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+    echo "usage: $0 <python-version> <backend>" >&2
+    exit 2
+fi
+
+PYTHON_VERSION="$1"
+BACKEND="$2"
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+IMAGE_TAG="${QTILE_CI_IMAGE:-qtile-ci:latest}"
+
+docker build \
+    --file "${ROOT}/.github/ci/Dockerfile" \
+    --tag "${IMAGE_TAG}" \
+    "${ROOT}"
+
+docker_env=(
+    -e "QTILE_CI_PYTHON=${PYTHON_VERSION}"
+    -e "QTILE_CI_BACKEND=${BACKEND}"
+)
+
+# Forward GitHub Actions environment so the Makefile's coverage-run switch and
+# the coveralls upload inside the container both behave correctly. Any var
+# that is not set on the host is skipped.
+for var in \
+    GITHUB_ACTIONS \
+    GITHUB_TOKEN \
+    GITHUB_RUN_ID \
+    COVERALLS_FLAG_NAME \
+    COVERALLS_PARALLEL \
+    COVERALLS_SERVICE_JOB_ID
+do
+    if [ -n "${!var:-}" ]; then
+        docker_env+=(-e "${var}=${!var}")
+    fi
+done
+
+exec docker run --rm \
+    "${docker_env[@]}" \
+    --volume "${ROOT}:/qtile" \
+    --workdir /qtile \
+    "${IMAGE_TAG}" \
+    bash scripts/ci_run_tests

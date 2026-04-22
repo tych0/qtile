@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# Run the qtile CI test suite. Intended to be executed inside the CI docker
+# container by scripts/ci_docker_run. The qtile tree is expected to be
+# bind-mounted at /qtile and QTILE_CI_PYTHON / QTILE_CI_BACKEND must be set.
+
+set -euo pipefail
+
+# The mounted source tree can be owned by a different uid than the container
+# user; git refuses to operate on such trees by default.
+git config --global --add safe.directory /qtile
+
+[ "$(grep -c -P '\t' CHANGELOG)" = "0" ]
+
+dump_cores() {
+    echo "=== Listing coredumps ==="
+    coredumpctl list || true
+    echo "=== Stack trace for last coredump ==="
+    coredumpctl debug --debugger-arguments="-batch -ex 'set pagination off' -ex 'bt full' -ex 'quit'" || true
+}
+trap dump_cores ERR
+
+make QTILE_CI_PYTHON="${QTILE_CI_PYTHON}" QTILE_CI_BACKEND="${QTILE_CI_BACKEND}" check check-packaging
+uv run coverage combine -q
+uv run coverage report -m
+uv run coverage xml
+
+# Upload coverage only when running under GitHub Actions with a token
+# available; local runs should be a no-op.
+if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+    uv tool run coveralls --service=github || true
+fi
