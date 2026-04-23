@@ -13,7 +13,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Etc/UTC \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
-    PATH="/root/.local/bin:${PATH}"
+    PATH="/root/.local/bin:${PATH}" \
+    UV_PYTHON_PREFERENCE=only-system
 
 # Base tools needed to drive the rest of the install (sudo is required because
 # scripts/ubuntu_wayland_setup uses it; inside the container we run as root so
@@ -33,9 +34,22 @@ RUN apt-get update \
         libssl-dev \
         libxml2-dev \
         pkg-config \
+        software-properties-common \
         sudo \
         wget \
         yq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install every python version in the test matrix with dev headers from the
+# deadsnakes PPA. uv is configured (UV_PYTHON_PREFERENCE=only-system) to use
+# these rather than downloading python-build-standalone; source-built wheels
+# like pycairo's meson build need the python headers and .pc files that only
+# a full apt python install provides.
+RUN add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get install -y --no-install-recommends \
+        python3.12 python3.12-dev python3.12-venv \
+        python3.13 python3.13-dev python3.13-venv \
+        python3.14 python3.14-dev python3.14-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Install the apt packages declared in .readthedocs.yaml, matching the
@@ -58,8 +72,8 @@ RUN cd /tmp \
         /tmp/wayland-* /tmp/wlroots-* /tmp/libdrm-* /tmp/seatd-* \
         /tmp/pixman-* /tmp/hwdata-* /tmp/xserver-*
 
-# Install uv (replaces the astral-sh/setup-uv GitHub Action). Individual
-# python toolchains are fetched on demand by uv when `make check` runs.
+# Install uv (replaces the astral-sh/setup-uv GitHub Action). uv picks up the
+# system pythons installed above because UV_PYTHON_PREFERENCE=only-system.
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # The qtile source tree is mounted here at run time.
