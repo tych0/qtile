@@ -17,12 +17,22 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Base tools needed to drive the rest of the install (sudo is required because
 # scripts/ubuntu_wayland_setup uses it; inside the container we run as root so
-# sudo becomes a no-op passthrough).
+# sudo becomes a no-op passthrough). The build toolchain (build-essential,
+# cmake, pkg-config, libxml2-dev, libffi-dev, libexpat1-dev, libssl-dev) is
+# pre-installed on GitHub's ubuntu-24.04 runner but not in a fresh ubuntu
+# image; the wayland and xwayland meson builds need it.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
         ca-certificates \
+        cmake \
         curl \
         git \
+        libexpat1-dev \
+        libffi-dev \
+        libssl-dev \
+        libxml2-dev \
+        pkg-config \
         sudo \
         wget \
         yq \
