@@ -9,6 +9,7 @@ jobs:
         runs-on: ubuntu-24.04
         name: "python ${{ matrix.python-version }} on ${{ matrix.backend }}"
         strategy:
+            fail-fast: false
             matrix:
                 # If you change one of these, be sure to update:
                 # - /pyproject.toml:[tool.mypy]

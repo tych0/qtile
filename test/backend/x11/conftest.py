@@ -120,8 +120,21 @@ class Xephyr:
         Starts the Xephyr instance and sets the `self.display` to the display
         which is used to setup the instance.
         """
-        # get a new display
-        display, self.xephyr_display_file = xcffib.testing.find_display()
+        # Find a display that isn't the host Xvfb's. xcffib.testing.find_display
+        # can hand us back the same display number Xvfb already took because
+        # Xvfb replaces the lock-file inode at startup, which silently
+        # invalidates our flock — leading to Xephyr failing to bind, the test
+        # fixture connecting to Xvfb instead, and spurious single-monitor
+        # behaviour for dualmonitor tests.
+        host_display = os.environ.get("DISPLAY")
+        stale_locks = []
+        while True:
+            display, self.xephyr_display_file = xcffib.testing.find_display()
+            if f":{display}" != host_display:
+                break
+            stale_locks.append(self.xephyr_display_file)
+        for stale in stale_locks:
+            stale.close()
         self.display = f":{display}"
         self.xephyr_display = self.display
 
