@@ -542,8 +542,13 @@ class Window(_Window, metaclass=ABCMeta):
                     dropdown.show()
                     return True
             return False
-        # Normal window activation
-        self.qtile.current_screen.set_group(self.group)
+        # If the window's group is already visible on another screen, just
+        # move focus to that screen rather than swapping groups between
+        # screens (which is what current_screen.set_group would do).
+        if self.group.screen is not None and self.group.screen is not self.qtile.current_screen:
+            self.qtile.focus_screen(self.group.screen.index, warp=False)
+        else:
+            self.qtile.current_screen.set_group(self.group)
         self.group.focus(self)
         self.bring_to_front()
         return True
@@ -555,7 +560,10 @@ class Window(_Window, metaclass=ABCMeta):
             logger.debug("Focusing window (focus_on_window_activation='focus')")
             self.activate()
         elif focus_behavior == "smart":
-            if self.group and self.group.screen == self.qtile.current_screen:
+            # The window is "smart-focusable" if its group is currently visible
+            # on any screen (so focusing it isn't taking focus from a hidden
+            # group). Otherwise, mark it urgent.
+            if self.group and self.group.screen is not None:
                 logger.debug("Focusing window (focus_on_window_activation='smart')")
                 self.activate()
             else:

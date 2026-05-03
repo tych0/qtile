@@ -78,6 +78,10 @@ class SmartConfig(BareConfig):
     focus_on_window_activation = "smart"
 
 
+class FocusConfig(BareConfig):
+    focus_on_window_activation = "focus"
+
+
 class FuncConfig(BareConfig):
     # must be a static method here because otherwise it gets turned into a MethodType (we need a FunctionType)
     # this is only an issue in this test and not the real config file
@@ -112,12 +116,15 @@ def test_urgent_hook_fire(xmanager_nospawn):
     xmanager_nospawn.terminate()
     assert xmanager_nospawn.hook_fired.value == 1
 
-    # test that focus_on_window_activation = "smart" also fires the hook
+    # test that focus_on_window_activation = "smart" also fires the hook when
+    # the window's group is not currently visible on any screen
     xmanager_nospawn.start(SmartConfig, no_spawn=True)
 
     xmanager_nospawn.test_window("one")
     window_info = xmanager_nospawn.c.window.info()
-    xmanager_nospawn.c.window.toscreen(1)
+    # Move window to a group that is not displayed on either screen (in the
+    # dualmonitor setup, screens display groups "a" and "b", so "c" is hidden).
+    xmanager_nospawn.c.window.togroup("c")
 
     # send activate window message
     ev = xcffib.xproto.ClientMessageEvent.synthetic(
@@ -146,6 +153,49 @@ def test_urgent_hook_fire(xmanager_nospawn):
     xmanager_nospawn.terminate()
 
     assert xmanager_nospawn.hook_fired.value == 3
+
+
+def _send_net_active_window(conn, wid):
+    data = xcffib.xproto.ClientMessageData.synthetic([0, 0, 0, 0, 0], "IIIII")
+    ev = xcffib.xproto.ClientMessageEvent.synthetic(
+        32, wid, conn.atoms["_NET_ACTIVE_WINDOW"], data
+    )
+    conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
+    conn.xsync()
+
+
+@dualmonitor
+@pytest.mark.parametrize("activation_config", [SmartConfig, FocusConfig])
+def test_net_active_window_focuses_other_screen(xmanager_nospawn, activation_config):
+    """_NET_ACTIVE_WINDOW for a window visible on another screen should move
+    focus to that screen instead of swapping groups (issue #5821)."""
+    xmanager_nospawn.display = xmanager_nospawn.backend.env["DISPLAY"]
+    conn = Connection(xmanager_nospawn.display)
+
+    xmanager_nospawn.start(activation_config)
+
+    # Open a window and move it to screen 1 (which displays group "b").
+    xmanager_nospawn.test_window("one")
+    wid = xmanager_nospawn.c.window.info()["id"]
+    xmanager_nospawn.c.window.toscreen(1)
+
+    # Make sure focus is back on screen 0 before activating.
+    xmanager_nospawn.c.to_screen(0)
+    assert xmanager_nospawn.c.screen.info()["index"] == 0
+
+    # Snapshot which group each screen is displaying.
+    group_on_screen_0 = xmanager_nospawn.c.screen[0].group.info()["name"]
+    group_on_screen_1 = xmanager_nospawn.c.screen[1].group.info()["name"]
+
+    _send_net_active_window(conn, wid)
+
+    # The active screen should now be screen 1 (where the window lives) and
+    # neither screen's group should have changed (no group swap happened).
+    assert xmanager_nospawn.c.screen.info()["index"] == 1
+    assert xmanager_nospawn.c.screen[0].group.info()["name"] == group_on_screen_0
+    assert xmanager_nospawn.c.screen[1].group.info()["name"] == group_on_screen_1
+
+    xmanager_nospawn.terminate()
 
 
 @manager_config

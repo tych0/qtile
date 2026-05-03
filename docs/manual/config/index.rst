@@ -128,7 +128,8 @@ configuration variables that control specific aspects of Qtile's behavior:
 
         - focus: automatically focus the window
 
-        - smart: automatically focus if the window is in the current group
+        - smart: automatically focus if the window's group is currently
+          visible on any screen; otherwise mark the window as urgent
 
         - never: never automatically focus any window that requests it
 
