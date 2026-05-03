@@ -198,6 +198,39 @@ def test_net_active_window_focuses_other_screen(xmanager_nospawn, activation_con
     xmanager_nospawn.terminate()
 
 
+@dualmonitor
+def test_smart_activation_other_screen_does_not_fire_urgent(xmanager_nospawn):
+    """Under focus_on_window_activation='smart', a window visible on another
+    screen should be focused (not marked urgent) — issue #5821."""
+    xmanager_nospawn.display = xmanager_nospawn.backend.env["DISPLAY"]
+    conn = Connection(xmanager_nospawn.display)
+
+    xmanager_nospawn.hook_fired = Value("i", 0)
+
+    def _hook_test(val):
+        xmanager_nospawn.hook_fired.value += 1
+
+    hook.subscribe.client_urgent_hint_changed(_hook_test)
+
+    xmanager_nospawn.start(SmartConfig)
+
+    # Window starts on screen 0 (group "a"), then move it to screen 1 (group
+    # "b") so its group is visible on a non-current screen.
+    xmanager_nospawn.test_window("one")
+    wid = xmanager_nospawn.c.window.info()["id"]
+    xmanager_nospawn.c.window.toscreen(1)
+    xmanager_nospawn.c.to_screen(0)
+    assert xmanager_nospawn.c.screen.info()["index"] == 0
+
+    _send_net_active_window(conn, wid)
+
+    # smart should focus across screens (visible window) and not fire urgent.
+    assert xmanager_nospawn.hook_fired.value == 0
+    assert xmanager_nospawn.c.screen.info()["index"] == 1
+
+    xmanager_nospawn.terminate()
+
+
 @manager_config
 def test_default_float_hints(xmanager, conn):
     xmanager.c.next_layout()
