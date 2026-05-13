@@ -1,8 +1,18 @@
+import multiprocessing
+
 import pytest
 
 import libqtile
 from libqtile.backend.base import drawer
 from test.helpers import BareConfig, TestManager
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _set_multiprocessing_start_method():
+    # The qtile child process is launched via multiprocessing.Process; force
+    # `fork` once per session so we don't repeatedly toggle the global start
+    # method while imports/threads are live in the parent test process.
+    multiprocessing.set_start_method("fork", force=True)
 
 
 def pytest_addoption(parser):

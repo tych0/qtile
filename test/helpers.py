@@ -76,6 +76,27 @@ class Retry:
         return wrapper
 
 
+def _kill_proc(proc, term_timeout=5, kill_timeout=5):
+    """Terminate a subprocess.Popen with SIGTERM, escalating to SIGKILL.
+
+    Without this, ``proc.wait()`` with no timeout can hang the entire test
+    session if a child window process is stuck in a syscall (e.g. blocked
+    on a wedged X server) or becomes a zombie under a non-reaping parent.
+    """
+    proc.terminate()
+    try:
+        proc.wait(timeout=term_timeout)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    proc.kill()
+    try:
+        proc.wait(timeout=kill_timeout)
+    except subprocess.TimeoutExpired:
+        print(f"child pid {proc.pid} did not die after SIGKILL", file=sys.stderr)
+
+
 class BareConfig(Config):
     auto_fullscreen = True
     groups = [config.Group("a"), config.Group("b"), config.Group("c"), config.Group("d")]
@@ -181,7 +202,6 @@ class TestManager:
         return os.read(self.logspipe, 64 * 1024).decode("utf-8")
 
     def start(self, config_class, no_spawn=False, state=None):
-        multiprocessing.set_start_method("fork", force=True)
         readlogs, writelogs = os.pipe()
         rpipe, wpipe = multiprocessing.Pipe()
 
@@ -270,7 +290,12 @@ class TestManager:
                 # desperate times... this probably messes with multiprocessing...
                 try:
                     os.kill(self.proc.pid, signal.SIGKILL)
-                    self.proc.join()
+                    self.proc.join(5)
+                    if self.proc.is_alive():
+                        print(
+                            f"qtile (pid {self.proc.pid}) did not die after SIGKILL",
+                            file=sys.stderr,
+                        )
                 except OSError:
                     # The process may have died due to some other error
                     pass
@@ -281,9 +306,7 @@ class TestManager:
             self.proc = None
 
         for proc in self.testwindows[:]:
-            proc.terminate()
-            proc.wait()
-
+            _kill_proc(proc)
             self.testwindows.remove(proc)
 
     def create_window(self, create, failed=None):
@@ -343,8 +366,7 @@ class TestManager:
         """
         assert proc in self.testwindows, "Given process is not a spawned window"
         start = len(self.c.windows())
-        proc.terminate()
-        proc.wait()
+        _kill_proc(proc)
         self.testwindows.remove(proc)
 
         @Retry(ignore_exceptions=(ValueError,))
