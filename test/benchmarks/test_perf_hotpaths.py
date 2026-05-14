@@ -22,12 +22,11 @@ from __future__ import annotations
 import pytest
 
 xcffib = pytest.importorskip("xcffib")
-import xcffib.xproto as xp  # noqa: E402
 import xcffib.randr as rr  # noqa: E402
+import xcffib.xproto as xp  # noqa: E402
 
 from libqtile import pangocffi  # noqa: E402
 from libqtile.backend.x11 import core as x11core  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Pango FontDescription caching

@@ -104,6 +104,22 @@ class FontDescription:
         pointer = ffi.gc(pointer, pango.pango_font_description_free)
         return cls(pointer)
 
+    def set_family(self, family):
+        pango.pango_font_description_set_family(self._pointer, family.encode())
+
+    def get_family(self):
+        ret = pango.pango_font_description_get_family(self._pointer)
+        return ffi.string(ret).decode()
+
+    def set_absolute_size(self, size):
+        pango.pango_font_description_set_absolute_size(self._pointer, size)
+
+    def set_size(self, size):
+        pango.pango_font_description_set_size(self._pointer, size)
+
+    def get_size(self):
+        return pango.pango_font_description_get_size(self._pointer)
+
 
 # Cache of FontDescriptions keyed by their pango spec string.
 # pango_layout_set_font_description() copies the description internally,
@@ -125,22 +141,6 @@ def get_cached_font_description(spec: str) -> FontDescription:
         fd = FontDescription.from_string(spec)
         _FONT_DESCRIPTION_CACHE[spec] = fd
     return fd
-
-    def set_family(self, family):
-        pango.pango_font_description_set_family(self._pointer, family.encode())
-
-    def get_family(self):
-        ret = pango.pango_font_description_get_family(self._pointer)
-        return ffi.string(ret).decode()
-
-    def set_absolute_size(self, size):
-        pango.pango_font_description_set_absolute_size(self._pointer, size)
-
-    def set_size(self, size):
-        pango.pango_font_description_set_size(self._pointer, size)
-
-    def get_size(self):
-        return pango.pango_font_description_get_size(self._pointer)
 
 
 class BadMarkup(Exception):
