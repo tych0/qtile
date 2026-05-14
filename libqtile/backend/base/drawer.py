@@ -340,7 +340,7 @@ class TextLayout:
         layout.set_alignment(pangocffi.ALIGN_CENTER)
         if not wrap:  # pango wraps by default
             layout.set_ellipsize(pangocffi.ELLIPSIZE_END)
-        desc = pangocffi.FontDescription.from_string(f"{font_family} {font_size}px")
+        desc = pangocffi.get_cached_font_description(f"{font_family} {font_size}px")
         layout.set_font_description(desc)
         self.font_shadow = font_shadow
         self.layout = layout

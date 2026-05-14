@@ -40,6 +40,33 @@ EVENT_TO_HANDLER = {
     xcffib.xproto.UnmapNotifyEvent: "handle_UnmapNotify",
 }
 
+# For each event class, the attribute name on the event whose value should
+# be looked up in qtile.windows_map to find the target window. ``None`` means
+# the event has no associated managed window.
+#
+# Derived once at import time so the hot _get_target_chain path avoids
+# per-event hasattr() probes (each of which incurs an exception-suppression
+# round trip in CPython).
+_EVENT_WINDOW_ATTR = {
+    xcffib.xproto.ButtonPressEvent: "event",
+    xcffib.xproto.ButtonReleaseEvent: "event",
+    xcffib.xproto.ClientMessageEvent: "window",
+    xcffib.xproto.ConfigureRequestEvent: "window",
+    xcffib.xproto.DestroyNotifyEvent: "window",
+    xcffib.xproto.EnterNotifyEvent: "event",
+    xcffib.xproto.ExposeEvent: "window",
+    xcffib.xproto.FocusOutEvent: "event",
+    xcffib.xproto.KeyPressEvent: "event",
+    xcffib.xproto.LeaveNotifyEvent: "event",
+    xcffib.xproto.MappingNotifyEvent: None,
+    xcffib.xproto.MapRequestEvent: "window",
+    xcffib.xproto.MotionNotifyEvent: "event",
+    xcffib.xproto.PropertyNotifyEvent: "window",
+    xcffib.randr.ScreenChangeNotifyEvent: None,
+    xcffib.xproto.SelectionNotifyEvent: None,
+    xcffib.xproto.UnmapNotifyEvent: "window",
+}
+
 _IGNORED_EVENTS = {
     xcffib.xproto.CreateNotifyEvent,
     xcffib.xproto.FocusInEvent,
@@ -390,36 +417,26 @@ class Core(base.Core):
         """
         assert self.qtile is not None
 
-        handler = EVENT_TO_HANDLER.get(event.__class__)
-
-        # If handler is None, this event has no handler and should be ignored
+        cls = event.__class__
+        handler = EVENT_TO_HANDLER.get(cls)
         if handler is None:
             return []
 
-        # Certain events expose the affected window id as an "event" attribute.
-        event_events = {
-            xcffib.xproto.EnterNotifyEvent,
-            xcffib.xproto.LeaveNotifyEvent,
-            xcffib.xproto.MotionNotifyEvent,
-            xcffib.xproto.ButtonPressEvent,
-            xcffib.xproto.ButtonReleaseEvent,
-            xcffib.xproto.KeyPressEvent,
-        }
-        if hasattr(event, "window"):
-            window = self.qtile.windows_map.get(event.window)
-        elif hasattr(event, "drawable"):
-            window = self.qtile.windows_map.get(event.drawable)
-        elif event.__class__ in event_events:
-            window = self.qtile.windows_map.get(event.event)
-        else:
+        wattr = _EVENT_WINDOW_ATTR.get(cls)
+        if wattr is None:
             window = None
+        else:
+            window = self.qtile.windows_map.get(getattr(event, wattr))
 
         chain = []
-        if window is not None and hasattr(window, handler):
-            chain.append(getattr(window, handler))
+        if window is not None:
+            method = getattr(window, handler, None)
+            if method is not None:
+                chain.append(method)
 
-        if hasattr(self, handler):
-            chain.append(getattr(self, handler))
+        method = getattr(self, handler, None)
+        if method is not None:
+            chain.append(method)
         return chain
 
     def get_valid_timestamp(self):

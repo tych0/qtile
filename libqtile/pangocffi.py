@@ -104,6 +104,28 @@ class FontDescription:
         pointer = ffi.gc(pointer, pango.pango_font_description_free)
         return cls(pointer)
 
+
+# Cache of FontDescriptions keyed by their pango spec string.
+# pango_layout_set_font_description() copies the description internally,
+# so multiple layouts can safely share a single cached FontDescription.
+# Property setters on TextLayout that mutate a FontDescription go through
+# Layout.get_font_description(), which returns the layout's own internal
+# copy — never the cached object — so the cache stays immutable.
+_FONT_DESCRIPTION_CACHE: dict[str, FontDescription] = {}
+
+
+def get_cached_font_description(spec: str) -> FontDescription:
+    """Return a (possibly cached) FontDescription parsed from ``spec``.
+
+    Parsing a font description triggers fontconfig lookups; reusing
+    descriptions across TextLayouts avoids that cost on every widget redraw.
+    """
+    fd = _FONT_DESCRIPTION_CACHE.get(spec)
+    if fd is None:
+        fd = FontDescription.from_string(spec)
+        _FONT_DESCRIPTION_CACHE[spec] = fd
+    return fd
+
     def set_family(self, family):
         pango.pango_font_description_set_family(self._pointer, family.encode())
 
