@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import glob
 import importlib
 import os
@@ -83,32 +84,40 @@ def rgb(x: ColorType) -> tuple[float, float, float, float]:
 
     Which is returned as (1.0, 0.0, 0.0, 0.5).
     """
+    if isinstance(x, str):
+        # Hex-string parsing is pure and only depends on the input string,
+        # so we route through a tiny LRU cache. Profiles show set_source_rgb
+        # is called several times per widget redraw with a handful of unique
+        # colours, so re-parsing the same hex each frame is wasted work.
+        return _rgb_from_string(x)
     if isinstance(x, tuple | list):
         if len(x) == 4:
             alpha = x[-1]
         else:
             alpha = 1.0
         return (x[0] / 255.0, x[1] / 255.0, x[2] / 255.0, alpha)
-    elif isinstance(x, str):
-        if x.startswith("#"):
-            x = x[1:]
-        if "." in x:
-            x, alpha_str = x.split(".")
-            alpha = float("0." + alpha_str)
-        else:
-            alpha = 1.0
-        if len(x) not in (3, 6, 8):
-            raise ValueError("RGB specifier must be 3, 6 or 8 characters long.")
-        if len(x) == 3:
-            # Multiplying by 17: 0xA * 17 = 0xAA etc.
-            vals = tuple(int(i, 16) * 17 for i in x)
-        else:
-            vals = tuple(int(i, 16) for i in (x[0:2], x[2:4], x[4:6]))
-        if len(x) == 8:
-            alpha = int(x[6:8], 16) / 255.0
-        vals += (alpha,)  # type: ignore
-        return rgb(vals)  # type: ignore
     raise ValueError("Invalid RGB specifier.")
+
+
+@functools.lru_cache(maxsize=256)
+def _rgb_from_string(x: str) -> tuple[float, float, float, float]:
+    if x.startswith("#"):
+        x = x[1:]
+    if "." in x:
+        x, alpha_str = x.split(".")
+        alpha = float("0." + alpha_str)
+    else:
+        alpha = 1.0
+    if len(x) not in (3, 6, 8):
+        raise ValueError("RGB specifier must be 3, 6 or 8 characters long.")
+    if len(x) == 3:
+        # Multiplying by 17: 0xA * 17 = 0xAA etc.
+        r, g, b = (int(i, 16) * 17 for i in x)
+    else:
+        r, g, b = (int(x[i : i + 2], 16) for i in (0, 2, 4))
+    if len(x) == 8:
+        alpha = int(x[6:8], 16) / 255.0
+    return (r / 255.0, g / 255.0, b / 255.0, alpha)
 
 
 def hex(x: ColorType) -> str:
