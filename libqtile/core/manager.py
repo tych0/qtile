@@ -80,9 +80,9 @@ class Qtile(CommandObject):
         self,
         kore: base.Core,
         config: Config,
+        socket_path: str,
         no_spawn: bool = False,
         state: str | None = None,
-        socket_path: str | None = None,
     ) -> None:
         self.core: base.Core = kore
         self.config = config
@@ -209,18 +209,6 @@ class Qtile(CommandObject):
         if initial:
             hook.fire("startup_complete")
 
-    def _prepare_socket_path(
-        self,
-        socket_path: str | None = None,
-    ) -> str:
-        if socket_path is None:
-            socket_path = ipc.find_sockfile(self.core.display_name)
-
-        if os.path.exists(socket_path):
-            os.unlink(socket_path)
-
-        return socket_path
-
     def loop(self) -> None:
         asyncio.run(self.async_loop(), loop_factory=lambda: libqtile.event_loop)
 
@@ -252,10 +240,7 @@ class Qtile(CommandObject):
                 signals[signal.SIGCHLD] = utils.reap_zombies
             async with (
                 LoopContext(signals),
-                ipc.Server(
-                    self._prepare_socket_path(self.socket_path),
-                    self.server.call,
-                ),
+                ipc.Server(self.socket_path, self.server.call),
             ):
                 await self._stopped_event.wait()
                 if lifecycle.behavior != lifecycle.behavior.RESTART:

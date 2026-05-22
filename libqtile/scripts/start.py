@@ -7,7 +7,7 @@ from sys import exit
 from typing import TYPE_CHECKING
 
 import libqtile.backend
-from libqtile import confreader, pangocffi, qtile
+from libqtile import confreader, ipc, pangocffi, qtile
 from libqtile.log_utils import logger
 from libqtile.utils import VERSION, get_config_file
 
@@ -70,12 +70,14 @@ def make_qtile(options) -> Qtile | None:
     # before start importing stuff
     from libqtile.core.manager import Qtile
 
+    socket_path = options.socket or ipc.find_sockfile(kore.display_name)
+
     return Qtile(
         kore,
         config,
         no_spawn=options.no_spawn,
         state=options.state,
-        socket_path=options.socket,
+        socket_path=socket_path,
     )
 
 
