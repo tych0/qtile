@@ -215,30 +215,11 @@
    fun:ffi_closure_alloc
 }
 
-# glib functions called via cffi (cairocffi / pangocffi / pygobject) often
-# return g_strdup'd strings whose ownership is unclear to the binding and
-# end up leaked. These are upstream binding bugs, not qtile bugs.
-{
-   cffi-glib-strdup-return
-   Memcheck:Leak
-   match-leak-kinds: definite,possible
-   fun:malloc
-   fun:g_malloc
-   fun:g_strdup
-   fun:ffi_call_unix64
-   ...
-}
-
-{
-   cffi-glib-malloc-return
-   Memcheck:Leak
-   match-leak-kinds: definite,possible
-   fun:malloc
-   fun:g_malloc
-   ...
-   fun:ffi_call_unix64
-   fun:ffi_call_int
-}
+# NOTE: deliberately NOT suppressing the generic "g_strdup via ffi_call_unix64"
+# pattern. That stack shape can come from any cffi-bound library, including
+# qtile's own libqtile/backend/wayland/_ffi.so, and suppressing it broadly
+# would hide qtile-owned leaks. Instead, each third-party Python binding gets
+# its own object-scoped entry below.
 
 # ---------------------------------------------------------------------------
 # GLib / GObject (pulled in by Pango, GTK introspection)
