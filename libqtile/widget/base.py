@@ -223,6 +223,8 @@ class _Widget(CommandObject, configurable.Configurable):
     def finalize(self):
         for future in self._futures:
             future.cancel()
+        if hasattr(self, "force_update"):
+            hook.unsubscribe.resume(self.force_update)
         if hasattr(self, "layout") and self.layout:
             self.layout.finalize()
             self.layout = None

@@ -36,6 +36,12 @@ class WindowTabs(base._TextBox):
         hook.subscribe.float_change(self.update)
         self.add_callbacks({"Button1": self.bar.screen.group.next_window})
 
+    def finalize(self):
+        hook.unsubscribe.client_name_updated(self.update)
+        hook.unsubscribe.focus_change(self.update)
+        hook.unsubscribe.float_change(self.update)
+        base._TextBox.finalize(self)
+
     def update(self, *args):
         names = []
         for w in self.bar.screen.group.windows:

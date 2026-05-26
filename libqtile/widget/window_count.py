@@ -38,6 +38,14 @@ class WindowCount(base._TextBox):
         hook.subscribe.group_window_add(self._wincount)
         hook.subscribe.setgroup(self._wincount)
 
+    def finalize(self):
+        hook.unsubscribe.client_killed(self._win_killed)
+        hook.unsubscribe.client_managed(self._wincount)
+        hook.unsubscribe.current_screen_change(self._wincount)
+        hook.unsubscribe.group_window_add(self._wincount)
+        hook.unsubscribe.setgroup(self._wincount)
+        base._TextBox.finalize(self)
+
     def _wincount(self, *args):
         try:
             self._count = len(self.bar.screen.group.windows)

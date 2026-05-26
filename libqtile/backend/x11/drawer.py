@@ -124,9 +124,9 @@ class Drawer(drawer.Drawer):
 
     def _paint(self):
         # Paint RecordingSurface operations to the XCBSurface
-        ctx = cairocffi.Context(self._xcb_surface)
-        ctx.set_source_surface(self.surface, 0, 0)
-        ctx.paint()
+        with cairocffi.Context(self._xcb_surface) as ctx:
+            ctx.set_source_surface(self.surface, 0, 0)
+            ctx.paint()
 
     def _draw(
         self,

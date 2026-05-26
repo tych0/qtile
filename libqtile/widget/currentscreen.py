@@ -21,6 +21,10 @@ class CurrentScreen(base._TextBox):
         hook.subscribe.current_screen_change(self.update_text)
         self.update_text()
 
+    def finalize(self):
+        hook.unsubscribe.current_screen_change(self.update_text)
+        base._TextBox.finalize(self)
+
     def update_text(self):
         if self.qtile.current_screen == self.bar.screen:
             self.layout.colour = self.active_color

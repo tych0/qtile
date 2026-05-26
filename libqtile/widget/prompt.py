@@ -413,6 +413,8 @@ class Prompt(base._TextBox):
             if self.active:
                 win.can_steal_focus = False
 
+        self._hook_prevent_focus_steal = prevent_focus_steal
+        self._hook_client_focus = f
         hook.subscribe.group_window_add(prevent_focus_steal)
         hook.subscribe.client_focus(f)
 
@@ -445,6 +447,15 @@ class Prompt(base._TextBox):
             logger.warning("Prompt widget only supports audible bell under X11")
         if self.bell_style == "visual":
             self.original_background = self.background
+
+    def finalize(self):
+        if hasattr(self, "_hook_prevent_focus_steal"):
+            hook.unsubscribe.group_window_add(self._hook_prevent_focus_steal)
+            del self._hook_prevent_focus_steal
+        if hasattr(self, "_hook_client_focus"):
+            hook.unsubscribe.client_focus(self._hook_client_focus)
+            del self._hook_client_focus
+        base._TextBox.finalize(self)
 
     def start_input(
         self,

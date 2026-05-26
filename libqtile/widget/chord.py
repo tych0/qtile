@@ -46,8 +46,16 @@ class Chord(base._TextBox):
 
             self.bar.draw()
 
+        self._hook_enter_chord = hook_enter_chord
         hook.subscribe.enter_chord(hook_enter_chord)
         hook.subscribe.leave_chord(self.clear)
+
+    def finalize(self):
+        if hasattr(self, "_hook_enter_chord"):
+            hook.unsubscribe.enter_chord(self._hook_enter_chord)
+            del self._hook_enter_chord
+        hook.unsubscribe.leave_chord(self.clear)
+        base._TextBox.finalize(self)
 
     def reset_colours(self):
         self.background = self.default_background

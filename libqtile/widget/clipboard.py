@@ -92,5 +92,16 @@ class Clipboard(base._TextBox):
                 self.timeout_id = self.timeout_add(self.timeout, self.clear)
             self.bar.draw()
 
+        self._hook_notify = hook_notify
+        self._hook_change = hook_change
         hook.subscribe.selection_notify(hook_notify)
         hook.subscribe.selection_change(hook_change)
+
+    def finalize(self):
+        if hasattr(self, "_hook_notify"):
+            hook.unsubscribe.selection_notify(self._hook_notify)
+            del self._hook_notify
+        if hasattr(self, "_hook_change"):
+            hook.unsubscribe.selection_change(self._hook_change)
+            del self._hook_change
+        base._TextBox.finalize(self)

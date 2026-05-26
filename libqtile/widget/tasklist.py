@@ -416,6 +416,15 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
         hook.subscribe.net_wm_icon_change(self.invalidate_cache)
         hook.subscribe.client_killed(self.remove_icon_cache)
 
+    def finalize(self):
+        hook.unsubscribe.client_name_updated(self.update)
+        hook.unsubscribe.focus_change(self.update)
+        hook.unsubscribe.float_change(self.update)
+        hook.unsubscribe.client_urgent_hint_changed(self.update)
+        hook.unsubscribe.net_wm_icon_change(self.invalidate_cache)
+        hook.unsubscribe.client_killed(self.remove_icon_cache)
+        base._Widget.finalize(self)
+
     def drawtext(self, text, textcolor, width):
         self.layout.text = text
         self.layout.colour = textcolor

@@ -399,6 +399,8 @@ class Bar(Gap, configurable.Configurable, CommandObject):
     def finalize(self) -> None:
         if self.future:
             self.future.cancel()
+        hook.unsubscribe.setgroup(self.set_layer)
+        hook.unsubscribe.startup_complete(self.set_layer)
         for widget in self.widgets:
             if not widget.finalized:
                 widget.finalize()
