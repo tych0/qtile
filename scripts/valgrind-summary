@@ -5,10 +5,24 @@
 # valgrind.<pid>.log file. This script collects the "ERROR SUMMARY" and
 # "LEAK SUMMARY" lines from each, prints any leak details, and exits non-zero
 # if at least one log reports "definitely lost" bytes.
+#
+# With --trace-children=yes valgrind also traces non-qtile helpers that the
+# build system spawns (gcc, ld, ldconfig, etc. — cffi runs them at import
+# time for feature detection). Those have their own leaks that we cannot
+# fix, so we skip them by default. Pass --include-helpers to include them.
 
 set -u
 
+INCLUDE_HELPERS=0
+if [ "${1:-}" = "--include-helpers" ]; then
+    INCLUDE_HELPERS=1
+    shift
+fi
+
 LOG_DIR=${1:-valgrind-logs}
+
+# Commands we don't own — leaks in these binaries are out of our control.
+SKIP_BINARIES_RE='/(gcc|cc1|collect2|ld|ldconfig|ldconfig\.real|as|objdump|nm|strip|readelf)( |$)'
 
 if [ ! -d "$LOG_DIR" ]; then
     echo "valgrind-summary: no log directory at $LOG_DIR" >&2
@@ -26,10 +40,17 @@ fi
 
 definite_leaks=0
 total_errors=0
+skipped=0
 
 for log in "${logs[@]}"; do
     # Pull the binary that produced the log (first "Command:" line).
     cmd=$(grep -m1 '^==[0-9]*== Command: ' "$log" | sed -E 's/^==[0-9]+== Command: //')
+
+    if [ "$INCLUDE_HELPERS" -eq 0 ] && [[ "$cmd" =~ $SKIP_BINARIES_RE ]]; then
+        skipped=$((skipped + 1))
+        continue
+    fi
+
     err_summary=$(grep -m1 'ERROR SUMMARY' "$log" || true)
     leak_summary=$(grep -A4 'LEAK SUMMARY:' "$log" || true)
     definite_line=$(echo "$leak_summary" | grep 'definitely lost:' || true)
@@ -57,7 +78,7 @@ for log in "${logs[@]}"; do
 done
 
 echo
-echo "valgrind-summary: ${#logs[@]} log(s), ${total_errors} total error(s), ${definite_leaks} log(s) with definite leaks"
+echo "valgrind-summary: ${#logs[@]} log(s) (${skipped} helper log(s) skipped), ${total_errors} total error(s), ${definite_leaks} log(s) with definite leaks"
 
 if [ "$definite_leaks" -gt 0 ]; then
     exit 1
