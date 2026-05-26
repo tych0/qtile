@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Summarise valgrind log files produced by the test suite.
+#
+# Each pytest run (and every forked qtile/X process) writes a separate
+# valgrind.<pid>.log file. This script collects the "ERROR SUMMARY" and
+# "LEAK SUMMARY" lines from each, prints any leak details, and exits non-zero
+# if at least one log reports "definitely lost" bytes.
+
+set -u
+
+LOG_DIR=${1:-valgrind-logs}
+
+if [ ! -d "$LOG_DIR" ]; then
+    echo "valgrind-summary: no log directory at $LOG_DIR" >&2
+    exit 0
+fi
+
+shopt -s nullglob
+logs=("$LOG_DIR"/valgrind.*.log)
+shopt -u nullglob
+
+if [ ${#logs[@]} -eq 0 ]; then
+    echo "valgrind-summary: no log files in $LOG_DIR" >&2
+    exit 0
+fi
+
+definite_leaks=0
+total_errors=0
+
+for log in "${logs[@]}"; do
+    # Pull the binary that produced the log (first "Command:" line).
+    cmd=$(grep -m1 '^==[0-9]*== Command: ' "$log" | sed -E 's/^==[0-9]+== Command: //')
+    err_summary=$(grep -m1 'ERROR SUMMARY' "$log" || true)
+    leak_summary=$(grep -A4 'LEAK SUMMARY:' "$log" || true)
+    definite_line=$(echo "$leak_summary" | grep 'definitely lost:' || true)
+
+    # "definitely lost: 0 bytes in 0 blocks" -> no leak; anything else counts.
+    if [ -n "$definite_line" ] && ! echo "$definite_line" | grep -q 'definitely lost: 0 bytes in 0 blocks'; then
+        definite_leaks=$((definite_leaks + 1))
+        echo
+        echo "=== $log ($cmd) ==="
+        echo "$err_summary"
+        echo "$leak_summary"
+        echo "-- definite-leak stacks --"
+        # Print the full stack trace for any "definitely lost" record.
+        awk '
+            /bytes? in [0-9,]+ blocks? are definitely lost/ {emit=1}
+            emit { print }
+            emit && /^==[0-9]+== *$/ { emit=0 }
+        ' "$log"
+    fi
+
+    if [ -n "$err_summary" ]; then
+        n=$(echo "$err_summary" | grep -oE '[0-9]+ errors' | head -1 | awk '{print $1}')
+        total_errors=$((total_errors + ${n:-0}))
+    fi
+done
+
+echo
+echo "valgrind-summary: ${#logs[@]} log(s), ${total_errors} total error(s), ${definite_leaks} log(s) with definite leaks"
+
+if [ "$definite_leaks" -gt 0 ]; then
+    exit 1
+fi
+exit 0

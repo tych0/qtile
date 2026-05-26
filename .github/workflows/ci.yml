@@ -49,3 +49,38 @@ jobs:
               with:
                 github-token: ${{ secrets.GITHUB_TOKEN }}
                 parallel-finished: true
+
+    valgrind:
+        # Valgrind makes the suite 10-50x slower, so we only run it on a
+        # single backend/python combination. The job is allowed to fail
+        # while we are still triaging baseline noise from the C extension;
+        # the produced logs are uploaded as a build artefact for inspection.
+        runs-on: ubuntu-24.04
+        name: "valgrind (wayland, python 3.13)"
+        continue-on-error: true
+        timeout-minutes: 180
+        steps:
+            - uses: actions/checkout@v6
+            - name: Build Docker image
+              run: |
+                docker build -t qtile-ci .
+            - name: Run tests under valgrind
+              run: |
+                mkdir coredumps valgrind-logs
+                sudo sysctl -w kernel.core_pattern=/workspace/coredumps/core-%e.%p.%t
+                make ci-check
+              env:
+                QTILE_CI_PYTHON: '3.13'
+                QTILE_CI_BACKEND: wayland
+                QTILE_CI_VALGRIND: '1'
+                GITHUB_ACTIONS: true
+                GITHUB_REF: ${{ github.ref }}
+                GITHUB_SHA: ${{ github.sha }}
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Upload valgrind logs
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                name: valgrind-logs
+                path: valgrind-logs/
+                if-no-files-found: ignore

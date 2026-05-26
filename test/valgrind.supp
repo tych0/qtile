@@ -1,0 +1,277 @@
+# Valgrind suppression file for the qtile test suite.
+#
+# Most entries here filter known noise from CPython, dlopen-based dynamic
+# loading, and from third-party libraries that qtile links against
+# transitively (pixman, glib, fontconfig, wlroots, mesa). Suppressions are
+# intentionally narrow: we want valgrind to keep complaining about leaks
+# that actually originate from qtile's own C extension.
+
+# ---------------------------------------------------------------------------
+# CPython interpreter
+# ---------------------------------------------------------------------------
+
+{
+   cpython-pymalloc-arena
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   fun:malloc
+   ...
+   fun:_PyObject_Malloc
+}
+
+{
+   cpython-pymalloc-realloc
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   fun:realloc
+   ...
+   fun:_PyObject_Realloc
+}
+
+{
+   cpython-import
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:PyImport_ImportModuleLevelObject
+}
+
+{
+   cpython-module-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:PyModule_ExecDef
+}
+
+{
+   cpython-type-ready
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:PyType_Ready
+}
+
+{
+   cpython-init-config
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:_PyConfig_InitImportConfig
+}
+
+{
+   cpython-runtime-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:_PyRuntime_Initialize
+}
+
+{
+   cpython-interp-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:Py_InitializeFromConfig
+}
+
+{
+   cpython-thread-state
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:PyThreadState_New
+}
+
+{
+   cpython-dictresize-cond
+   Memcheck:Cond
+   ...
+   fun:dictresize
+}
+
+# ---------------------------------------------------------------------------
+# Dynamic loader / glibc
+# ---------------------------------------------------------------------------
+
+{
+   ld-linux-dlopen
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:_dl_open
+}
+
+{
+   ld-linux-init-tls
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:_dl_allocate_tls
+}
+
+{
+   glibc-libc-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:__libc_csu_init
+}
+
+{
+   glibc-pthread-create-stack
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:allocate_stack
+   fun:pthread_create*
+}
+
+# ---------------------------------------------------------------------------
+# libffi (used by cffi to call into C)
+# ---------------------------------------------------------------------------
+
+{
+   libffi-closure-alloc
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:ffi_closure_alloc
+}
+
+# ---------------------------------------------------------------------------
+# GLib / GObject (pulled in by Pango, GTK introspection)
+# ---------------------------------------------------------------------------
+
+{
+   glib-once-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:g_once_init_*
+}
+
+{
+   glib-type-register
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:g_type_register_*
+}
+
+{
+   glib-quark
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:g_quark_*
+}
+
+{
+   glib-main-context-new
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:g_main_context_new
+}
+
+# ---------------------------------------------------------------------------
+# Fontconfig / FreeType / Pango / Cairo
+# ---------------------------------------------------------------------------
+
+{
+   fontconfig-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:FcInit*
+}
+
+{
+   fontconfig-config-build
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:FcConfig*
+}
+
+{
+   freetype-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:FT_Init_FreeType
+}
+
+{
+   pango-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:pango_*
+}
+
+{
+   cairo-image-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:_cairo_image_*
+}
+
+# ---------------------------------------------------------------------------
+# Pixman (cached scratch buffers, see pixman_image_create_bits docs)
+# ---------------------------------------------------------------------------
+
+{
+   pixman-thread-pool
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:pixman_*
+}
+
+# ---------------------------------------------------------------------------
+# Mesa / GLX / DRI (loaded indirectly via cairo-gl and wlroots renderers)
+# ---------------------------------------------------------------------------
+
+{
+   mesa-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   obj:*/libGLX*
+}
+
+{
+   mesa-dri-init
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   obj:*/dri/*
+}
+
+# ---------------------------------------------------------------------------
+# xkbcommon / libxkbcommon (one-time keymap compilation)
+# ---------------------------------------------------------------------------
+
+{
+   xkbcommon-compile
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:xkb_keymap_*
+}
+
+# ---------------------------------------------------------------------------
+# dbus (lazy-initialised connection caches)
+# ---------------------------------------------------------------------------
+
+{
+   dbus-message-cache
+   Memcheck:Leak
+   match-leak-kinds: reachable,possible,indirect
+   ...
+   fun:dbus_message_*
+}
