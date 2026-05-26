@@ -7,13 +7,72 @@
 # that actually originate from qtile's own C extension.
 
 # ---------------------------------------------------------------------------
+# CPython interpreter shutdown leaks. When a stripped libpython is used (the
+# default on most distros), valgrind sees a flood of "definitely lost"
+# blocks whose stack is entirely "??? (in /usr/bin/python3.x)". CPython
+# intentionally does not free every type object / module / frame at exit;
+# these patterns are picked up by matching the python binary in the stack.
+# ---------------------------------------------------------------------------
+
+{
+   cpython-shutdown-leak-stripped
+   Memcheck:Leak
+   match-leak-kinds: definite,possible,reachable,indirect
+   fun:malloc
+   obj:*/python3*
+   ...
+}
+
+{
+   cpython-shutdown-realloc-stripped
+   Memcheck:Leak
+   match-leak-kinds: definite,possible,reachable,indirect
+   fun:realloc
+   obj:*/python3*
+   ...
+}
+
+{
+   cpython-shutdown-calloc-stripped
+   Memcheck:Leak
+   match-leak-kinds: definite,possible,reachable,indirect
+   fun:calloc
+   obj:*/python3*
+   ...
+}
+
+{
+   cpython-pyunicode-join
+   Memcheck:Leak
+   match-leak-kinds: definite,possible,reachable,indirect
+   ...
+   fun:_PyUnicode_JoinArray
+}
+
+{
+   cpython-pyobject-gc-new
+   Memcheck:Leak
+   match-leak-kinds: definite,possible,reachable,indirect
+   ...
+   fun:_PyObject_GC_New
+}
+
+{
+   cpython-init-module
+   Memcheck:Leak
+   match-leak-kinds: definite,possible,reachable,indirect
+   ...
+   fun:_my_Py_InitModule
+}
+
+# ---------------------------------------------------------------------------
 # CPython interpreter
 # ---------------------------------------------------------------------------
 
 {
    cpython-pymalloc-arena
    Memcheck:Leak
-   match-leak-kinds: reachable,possible,indirect
+   match-leak-kinds: definite,reachable,possible,indirect
    fun:malloc
    ...
    fun:_PyObject_Malloc
@@ -98,17 +157,33 @@
 {
    ld-linux-dlopen
    Memcheck:Leak
-   match-leak-kinds: reachable,possible,indirect
+   match-leak-kinds: definite,reachable,possible,indirect
    ...
    fun:_dl_open
 }
 
 {
+   ld-linux-dl-init
+   Memcheck:Leak
+   match-leak-kinds: definite,reachable,possible,indirect
+   ...
+   fun:_dl_init
+}
+
+{
    ld-linux-init-tls
    Memcheck:Leak
-   match-leak-kinds: reachable,possible,indirect
+   match-leak-kinds: definite,reachable,possible,indirect
    ...
    fun:_dl_allocate_tls
+}
+
+{
+   ld-linux-dl-catch-exception
+   Memcheck:Leak
+   match-leak-kinds: definite,reachable,possible,indirect
+   ...
+   fun:_dl_catch_exception
 }
 
 {

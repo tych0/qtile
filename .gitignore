@@ -67,3 +67,6 @@ uv.lock
 
 # dynamically built files for wayland backend build
 libconfig.mk
+
+# valgrind output
+valgrind-logs/
