@@ -14,12 +14,12 @@ import pytest
 
 from libqtile import images
 
-# Decoding images in-process (libqtile.images -> cairocffi.pixbuf -> glycin)
-# spawns persistent glycin/GLib worker threads. Those threads would be inherited
-# by every qtile instance the suite later fork()s, deadlocking pango font loading
-# (g_cond_wait) in the child. Run each test in its own subprocess so the threads
-# die with it and the main pytest process stays fork-safe.
-pytestmark = pytest.mark.forked
+# These tests decode images in-process (libqtile.images -> cairocffi.pixbuf ->
+# glycin). glycin leaves fork-unsafe state behind (worker threads, a D-Bus
+# connection, a loader subprocess), so any qtile fork()ed afterwards would
+# deadlock loading an image. They are reordered to run after every qtile-
+# launching test. See conftest.pytest_collection_modifyitems.
+pytestmark = pytest.mark.decodes_image
 
 TEST_DIR = path.dirname(os.path.abspath(__file__))
 DATA_DIR = path.join(TEST_DIR, "data")
