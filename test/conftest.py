@@ -35,7 +35,6 @@ def pytest_collection_modifyitems(config, items):
     items.sort(key=lambda item: item.get_closest_marker("decodes_image") is not None)
 
 
-
 def pytest_cmdline_main(config):
     if not config.option.backend:
         config.option.backend = ["x11"]
