@@ -3,22 +3,29 @@ import libqtile.config
 import libqtile.confreader
 import libqtile.layout
 from libqtile.widget import CurrentScreen
-from test.conftest import dualmonitor
+from test.conftest import MinimalConf, dualmonitor
 
 ACTIVE = "#FF0000"
 INACTIVE = "#00FF00"
 
 
-@dualmonitor
-def test_change_screen(manager_nospawn, minimal_conf_noscreen):
-    cswidget = CurrentScreen(active_color=ACTIVE, inactive_color=INACTIVE)
+def currentscreen_config():
+    class Conf(MinimalConf):
+        screens = [
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar(
+                    [CurrentScreen(active_color=ACTIVE, inactive_color=INACTIVE)], 10
+                )
+            ),
+            libqtile.config.Screen(),
+        ]
 
-    config = minimal_conf_noscreen
-    config.screens = [
-        libqtile.config.Screen(top=libqtile.bar.Bar([cswidget], 10)),
-        libqtile.config.Screen(),
-    ]
-    manager_nospawn.start(config)
+    return Conf()
+
+
+@dualmonitor
+def test_change_screen(manager_nospawn):
+    manager_nospawn.start(currentscreen_config)
 
     widget = manager_nospawn.c.widget["currentscreen"]
 

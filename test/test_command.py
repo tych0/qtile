@@ -411,29 +411,47 @@ def test_core_node(manager, backend_name):
     assert manager.c.core.info()["backend"] == backend_name
 
 
-def test_lazy_arguments(manager_nospawn):
-    # Decorated function to be bound to key presses
+def lazy_arguments_config():
+    # The lazy function and the keys that bind it are built in the forkserver
+    # child: the decorated function isn't picklable, and mutating the shared
+    # ServerConfig.keys in the parent wouldn't reach the child.
     @lazy.function
     def test_func(qtile, value, multiplier=1):
         qtile.test_func_output = value * multiplier
 
-    config = ServerConfig
-    config.keys = [
-        libqtile.config.Key(
-            ["control"],
-            "j",
-            test_func(10),
-        ),
-        libqtile.config.Key(["control"], "k", test_func(5, multiplier=100)),
-    ]
+    class Conf(ServerConfig):
+        keys = [
+            libqtile.config.Key(
+                ["control"],
+                "j",
+                test_func(10),
+            ),
+            libqtile.config.Key(["control"], "k", test_func(5, multiplier=100)),
+        ]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_lazy_arguments(manager_nospawn):
+    manager_nospawn.start(lazy_arguments_config)
 
     manager_nospawn.c.simulate_keypress(["control"], "j")
     assert manager_nospawn.c.eval("self.test_func_output") == "10"
 
     manager_nospawn.c.simulate_keypress(["control"], "k")
     assert manager_nospawn.c.eval("self.test_func_output") == "500"
+
+
+def lazy_coroutine_config():
+    @lazy.function
+    async def test_async_func(qtile, value):
+        await asyncio.sleep(0.1)
+        qtile.test_func_output = value
+
+    class Conf(ServerConfig):
+        keys = [libqtile.config.Key(["control"], "k", test_async_func("qtile"))]
+
+    return Conf()
 
 
 def test_lazy_function_coroutine(manager_nospawn):
@@ -443,15 +461,7 @@ def test_lazy_function_coroutine(manager_nospawn):
     def assert_func_text(manager, value):
         assert manager.c.eval("self.test_func_output") == value
 
-    @lazy.function
-    async def test_async_func(qtile, value):
-        await asyncio.sleep(0.1)
-        qtile.test_func_output = value
-
-    config = ServerConfig
-    config.keys = [libqtile.config.Key(["control"], "k", test_async_func("qtile"))]
-
-    manager_nospawn.start(config)
+    manager_nospawn.start(lazy_coroutine_config)
 
     manager_nospawn.c.simulate_keypress(["control"], "k")
     assert_func_text(manager_nospawn, "qtile")

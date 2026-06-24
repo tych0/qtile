@@ -1,3 +1,5 @@
+import functools
+
 import pytest
 
 import libqtile
@@ -45,34 +47,13 @@ class AllLayoutsConfig(Config):
 
     @classmethod
     def generate(cls):
-        """
-        Generate a configuration for each layout currently in the repo.
-        Each configuration has only the tested layout (i.e. 1 item) in the
-        'layouts' variable.
-        """
-        return [
-            type(layout_name, (cls,), {"layouts": [layout_cls()]})
-            for layout_name, layout_cls in cls.iter_layouts()
-        ]
+        """Forkserver-safe per-layout configs, one config per layout.
 
-
-class AllDelegateLayoutsConfig(AllLayoutsConfig):
-    @classmethod
-    def generate(cls):
+        Returns a list of pytest.param entries whose value is a picklable
+        config builder (see _layout_params). Kept as a classmethod because it is
+        also used by test/backend/wayland/test_window.py.
         """
-        Generate a Slice configuration for each layout currently in the repo.
-        Each layout is made a delegate/fallback layout of the Slice layout.
-        Each configuration has only the tested layout (i.e. 1 item) in the
-        'layouts' variable.
-        """
-        return [
-            type(
-                layout_name,
-                (cls,),
-                {"layouts": [layout.slice.Slice(wname="nevermatch", fallback=layout_cls())]},
-            )
-            for layout_name, layout_cls in cls.iter_layouts()
-        ]
+        return _layout_params(_single_layout_config)
 
 
 class AllLayouts(AllLayoutsConfig):
@@ -107,15 +88,63 @@ class AllLayoutsConfigEvents(AllLayoutsConfig):
                 libqtile.qtile.test_data["focus_change"] += 1
 
 
+# These config builders run in the forkserver child (see test/helpers.py).
+# Each builds the per-layout config there, rather than generating config classes
+# dynamically in the parent: fork() used to carry those classes into the child,
+# but forkserver cannot pickle a class produced by type() (it isn't importable
+# by qualified name). A module-level builder + functools.partial is picklable.
+def _named(config_cls, layout_name):
+    # Some tests assert config.__class__.__name__.lower() == layout name, which
+    # the old type(layout_name, ...) classes satisfied; preserve that.
+    config_cls.__name__ = layout_name
+    config_cls.__qualname__ = layout_name
+    return config_cls()
+
+
+def _single_layout_config(layout_name):
+    layout_cls = getattr(layout, layout_name)
+
+    class _Config(AllLayoutsConfig):
+        layouts = [layout_cls()]
+
+    return _named(_Config, layout_name)
+
+
+def _delegate_layout_config(layout_name):
+    layout_cls = getattr(layout, layout_name)
+
+    class _Config(AllLayoutsConfig):
+        layouts = [layout.slice.Slice(wname="nevermatch", fallback=layout_cls())]
+
+    return _named(_Config, layout_name)
+
+
+def _events_layout_config(layout_name):
+    layout_cls = getattr(layout, layout_name)
+
+    class _Config(AllLayoutsConfigEvents):
+        layouts = [layout_cls()]
+
+    return _named(_Config, layout_name)
+
+
+def _layout_params(builder):
+    # Keep the layout name as the test id (matching the old dynamic-class names).
+    return [
+        pytest.param(functools.partial(builder, layout_name), id=layout_name)
+        for layout_name, _ in AllLayoutsConfig.iter_layouts()
+    ]
+
+
 each_layout_config = pytest.mark.parametrize(
-    "manager", AllLayoutsConfig.generate(), indirect=True
+    "manager", _layout_params(_single_layout_config), indirect=True
 )
 all_layouts_config = pytest.mark.parametrize("manager", [AllLayouts], indirect=True)
 each_layout_config_events = pytest.mark.parametrize(
-    "manager", AllLayoutsConfigEvents.generate(), indirect=True
+    "manager", _layout_params(_events_layout_config), indirect=True
 )
 each_delegate_layout_config = pytest.mark.parametrize(
-    "manager", AllDelegateLayoutsConfig.generate(), indirect=True
+    "manager", _layout_params(_delegate_layout_config), indirect=True
 )
 
 

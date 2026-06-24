@@ -1,25 +1,39 @@
+import functools
+
 import pytest
 
-import libqtile.bar
-import libqtile.config
 from libqtile import widget
+from libqtile.bar import Bar
+from libqtile.config import Screen
+from test.conftest import MinimalConf
 
 
 def bad_importer(*args, **kwargs):
     raise ImportError()
 
 
-@pytest.mark.parametrize("position", ["top", "bottom", "left", "right"])
-def test_importerrorwidget(monkeypatch, manager_nospawn, minimal_conf_noscreen, position):
-    """Check we get an ImportError widget with missing import?"""
-    monkeypatch.setattr("libqtile.utils.importlib.import_module", bad_importer)
+def import_error_config(position):
+    """Build the config in the forkserver child.
+
+    The import is patched and the widget built here so the broken importer is
+    in place in the qtile process that actually constructs the widget.
+    """
+    import libqtile.utils
+
+    libqtile.utils.importlib.import_module = bad_importer
 
     badwidget = widget.TextBox("I am a naughty widget.")
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(**{position: libqtile.bar.Bar([badwidget], 10)})]
+    class ImportErrorConf(MinimalConf):
+        screens = [Screen(**{position: Bar([badwidget], 10)})]
 
-    manager_nospawn.start(config)
+    return ImportErrorConf()
+
+
+@pytest.mark.parametrize("position", ["top", "bottom", "left", "right"])
+def test_importerrorwidget(manager_nospawn, position):
+    """Check we get an ImportError widget with missing import?"""
+    manager_nospawn.start(functools.partial(import_error_config, position))
 
     testbar = manager_nospawn.c.bar[position]
     w = testbar.info()["widgets"][0]

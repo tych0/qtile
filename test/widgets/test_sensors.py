@@ -1,4 +1,5 @@
 import sys
+from functools import partial
 from importlib import reload
 from types import ModuleType
 
@@ -7,6 +8,7 @@ import pytest
 import libqtile.config
 import libqtile.widget
 from libqtile.bar import Bar
+from test.conftest import MinimalConf
 
 
 class Temp:
@@ -23,21 +25,25 @@ class MockPsutil(ModuleType):
         return {"core": [Temp("CPU", 45.0, fahrenheit)], "nvme": [Temp("NVME", 56.3, fahrenheit)]}
 
 
-@pytest.fixture
-def sensors_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen, request):
-    params = getattr(request, "param", dict())
-    monkeypatch.setitem(sys.modules, "psutil", MockPsutil("psutil"))
+def sensors_config(params):
+    sys.modules["psutil"] = MockPsutil("psutil")
     from libqtile.widget import sensors
 
     reload(sensors)
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([sensors.ThermalSensor(**params)], 10))]
+    class SensorsConf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([sensors.ThermalSensor(**params)], 10))]
 
     if "set_defaults" in params:
-        config.widget_defaults = {"foreground": "123456"}
+        SensorsConf.widget_defaults = {"foreground": "123456"}
 
-    manager_nospawn.start(config)
+    return SensorsConf()
+
+
+@pytest.fixture
+def sensors_manager(manager_nospawn, request):
+    params = getattr(request, "param", dict())
+    manager_nospawn.start(partial(sensors_config, params))
     yield manager_nospawn
 
 

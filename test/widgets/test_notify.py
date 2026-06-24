@@ -7,6 +7,7 @@ import pytest
 import libqtile.config
 from libqtile.bar import Bar
 from libqtile.widget import notify
+from test.conftest import MinimalConf
 
 
 # Bit of a hack... when we log a timer, save the delay in an attribute
@@ -64,12 +65,7 @@ DEFAULT_TIMEOUT_NORMAL = 30
 DEFAULT_TIMEOUT_URGENT = 45
 
 
-@pytest.mark.skipif(shutil.which("notify-send") is None, reason="notify-send not installed.")
-@pytest.mark.usefixtures("dbus")
-def test_notifications(manager_nospawn, minimal_conf_noscreen):
-    def background(obj):
-        return obj.eval("self.background")
-
+def notifications_config():
     notify.Notify.timeout_add = log_timeout
     widget = notify.Notify(
         foreground_urgent=URGENT,
@@ -78,10 +74,20 @@ def test_notifications(manager_nospawn, minimal_conf_noscreen):
         background_urgent=BACKGROUND_URGENT,
         background_low=BACKGROUND_LOW,
     )
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([widget], 10))]
 
-    manager_nospawn.start(config)
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([widget], 10))]
+
+    return Conf()
+
+
+@pytest.mark.skipif(shutil.which("notify-send") is None, reason="notify-send not installed.")
+@pytest.mark.usefixtures("dbus")
+def test_notifications(manager_nospawn):
+    def background(obj):
+        return obj.eval("self.background")
+
+    manager_nospawn.start(notifications_config)
     obj = manager_nospawn.c.widget["notify"]
 
     # Send first notification and check time and display time
@@ -168,9 +174,19 @@ def test_capabilities():
     assert widget_no_actions.capabilities == {"body"}
 
 
+def invoke_and_clear_config():
+    notify.Notify.timeout_add = log_timeout
+    widget = notify.Notify()
+
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([widget], 10))]
+
+    return Conf()
+
+
 @pytest.mark.skipif(shutil.which("notify-send") is None, reason="notify-send not installed.")
 @pytest.mark.usefixtures("dbus")
-def test_invoke_and_clear(manager_nospawn, minimal_conf_noscreen):
+def test_invoke_and_clear(manager_nospawn):
     # We need to create an object to listen for signals from the qtile
     # notification server. This needs to be created within the manager
     # object so we rely on "eval" applying "exec".
@@ -246,13 +262,8 @@ def test_invoke_and_clear(manager_nospawn, minimal_conf_noscreen):
         """
     )
 
-    notify.Notify.timeout_add = log_timeout
-    widget = notify.Notify()
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([widget], 10))]
-
     # Start the manager
-    manager_nospawn.start(config)
+    manager_nospawn.start(invoke_and_clear_config)
 
     # Create our signal listener
     manager_nospawn.c.eval(handler)
@@ -291,21 +302,27 @@ def test_invoke_and_clear(manager_nospawn, minimal_conf_noscreen):
     assert result == "[2, 'default']"
 
 
-@pytest.mark.skipif(shutil.which("notify-send") is None, reason="notify-send not installed.")
-@pytest.mark.usefixtures("dbus")
-def test_parse_text(manager_nospawn, minimal_conf_noscreen):
-    def test_parser(text):
-        return f"TEST:{text}"
+def _parse_text_parser(text):
+    return f"TEST:{text}"
 
+
+def parse_text_config():
     widget = notify.Notify(
         foreground_urgent=URGENT,
         foreground_low=LOW,
-        parse_text=test_parser,
+        parse_text=_parse_text_parser,
     )
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([widget], 10))]
 
-    manager_nospawn.start(config)
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([widget], 10))]
+
+    return Conf()
+
+
+@pytest.mark.skipif(shutil.which("notify-send") is None, reason="notify-send not installed.")
+@pytest.mark.usefixtures("dbus")
+def test_parse_text(manager_nospawn):
+    manager_nospawn.start(parse_text_config)
     obj = manager_nospawn.c.widget["notify"]
 
     # Send first notification and check time and display time
@@ -315,17 +332,23 @@ def test_parse_text(manager_nospawn, minimal_conf_noscreen):
     assert obj.info()["text"] == f"TEST:{MESSAGE_1}"
 
 
+def unregister_config():
+    widget = notify.Notify()
+
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([widget], 10))]
+
+    return Conf()
+
+
 @pytest.mark.usefixtures("dbus")
-def test_unregister(manager_nospawn, minimal_conf_noscreen):
+def test_unregister(manager_nospawn):
     """Short test to check if notifier deregisters correctly."""
 
     def notifier_has_callbacks():
         return manager_nospawn.c.widget["notify"].eval("notifier.callbacks") != "[]"
 
-    widget = notify.Notify()
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([widget], 10))]
-    manager_nospawn.start(config)
+    manager_nospawn.start(unregister_config)
 
     assert notifier_has_callbacks()
 
@@ -334,23 +357,28 @@ def test_unregister(manager_nospawn, minimal_conf_noscreen):
     assert not notifier_has_callbacks()
 
 
-@pytest.mark.parametrize(
-    "urgency,timeout",
-    [(0, DEFAULT_TIMEOUT_LOW), (1, DEFAULT_TIMEOUT_NORMAL), (2, DEFAULT_TIMEOUT_URGENT)],
-)
-@pytest.mark.skipif(shutil.which("notify-send") is None, reason="notify-send not installed.")
-@pytest.mark.usefixtures("dbus")
-def test_notifications_default_timeouts(manager_nospawn, minimal_conf_noscreen, urgency, timeout):
+def notifications_default_timeouts_config():
     notify.Notify.timeout_add = log_timeout
     widget = notify.Notify(
         default_timeout_low=DEFAULT_TIMEOUT_LOW,
         default_timeout=DEFAULT_TIMEOUT_NORMAL,
         default_timeout_urgent=DEFAULT_TIMEOUT_URGENT,
     )
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([widget], 10))]
 
-    manager_nospawn.start(config)
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([widget], 10))]
+
+    return Conf()
+
+
+@pytest.mark.parametrize(
+    "urgency,timeout",
+    [(0, DEFAULT_TIMEOUT_LOW), (1, DEFAULT_TIMEOUT_NORMAL), (2, DEFAULT_TIMEOUT_URGENT)],
+)
+@pytest.mark.skipif(shutil.which("notify-send") is None, reason="notify-send not installed.")
+@pytest.mark.usefixtures("dbus")
+def test_notifications_default_timeouts(manager_nospawn, urgency, timeout):
+    manager_nospawn.start(notifications_default_timeouts_config)
     obj = manager_nospawn.c.widget["notify"]
 
     # Send first notification and check time and display time

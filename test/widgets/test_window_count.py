@@ -3,47 +3,51 @@ import pytest
 import libqtile
 from libqtile.confreader import Config
 from libqtile.widget import WindowCount
+from test.conftest import MinimalConf
 
 
-class DifferentScreens(Config):
-    groups = [
-        libqtile.config.Group("a"),
-        libqtile.config.Group("b"),
-    ]
-    layouts = [
-        libqtile.layout.Stack(num_stacks=1),
-    ]
-    floating_layout = libqtile.resources.default_config.floating_layout
-    fake_screens = [
-        libqtile.config.Screen(
-            top=libqtile.bar.Bar(
-                [
-                    WindowCount(),
-                ],
-                20,
+def different_screens_config():
+    class DifferentScreens(Config):
+        groups = [
+            libqtile.config.Group("a"),
+            libqtile.config.Group("b"),
+        ]
+        layouts = [
+            libqtile.layout.Stack(num_stacks=1),
+        ]
+        floating_layout = libqtile.resources.default_config.floating_layout
+        fake_screens = [
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar(
+                    [
+                        WindowCount(),
+                    ],
+                    20,
+                ),
+                x=0,
+                y=0,
+                width=300,
+                height=300,
             ),
-            x=0,
-            y=0,
-            width=300,
-            height=300,
-        ),
-        libqtile.config.Screen(
-            top=libqtile.bar.Bar(
-                [
-                    WindowCount(),
-                ],
-                20,
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar(
+                    [
+                        WindowCount(),
+                    ],
+                    20,
+                ),
+                x=0,
+                y=300,
+                width=300,
+                height=300,
             ),
-            x=0,
-            y=300,
-            width=300,
-            height=300,
-        ),
-    ]
-    auto_fullscreen = True
+        ]
+        auto_fullscreen = True
+
+    return DifferentScreens()
 
 
-different_screens = pytest.mark.parametrize("manager", [DifferentScreens], indirect=True)
+different_screens = pytest.mark.parametrize("manager", [different_screens_config], indirect=True)
 
 
 @different_screens
@@ -61,11 +65,15 @@ def test_different_screens(manager):
     assert manager.c.screen[1].widget["windowcount"].get() == "2"
 
 
-def test_window_count(manager_nospawn, minimal_conf_noscreen):
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([WindowCount()], 10))]
+def window_count_config():
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([WindowCount()], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_window_count(manager_nospawn):
+    manager_nospawn.start(window_count_config)
 
     # No windows opened
     assert int(manager_nospawn.c.widget["windowcount"].get()) == 0

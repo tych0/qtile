@@ -22,6 +22,13 @@ from test.layouts.layout_utils import assert_focused
 
 configs_dir = Path(__file__).resolve().parent / "configs"
 
+
+def reloading_config():
+    # Built in the forkserver child; a module-level function is picklable
+    # (a lambda is not).
+    return BareConfig(file_path=configs_dir / "reloading.py")
+
+
 terminal = guess_terminal()
 
 
@@ -546,7 +553,7 @@ def test_nextprevgroup(manager):
 
 
 def test_nextprevgroup_reload(manager_nospawn):
-    manager_nospawn.start(lambda: BareConfig(file_path=configs_dir / "reloading.py"))
+    manager_nospawn.start(reloading_config)
     # Current group will become unmanaged after reloading
     manager_nospawn.c.eval("self.old_group = self.current_group")
     manager_nospawn.c.reload_config()
@@ -1118,12 +1125,13 @@ def test_change_loglevel(manager, backend_name):
         assert manager.c.core.eval("lib.WLR_SILENT == lib.wlr_log_get_verbosity()") == "True"
 
 
-def test_switch_groups_cursor_warp(manager_nospawn):
-    class SwitchGroupsCursorWarpConfig(ManagerConfig):
-        cursor_warp = True
-        layouts = [libqtile.layout.Stack(num_stacks=2), libqtile.layout.Max()]
-        groups = [libqtile.config.Group("a"), libqtile.config.Group("b", layout="max")]
+class SwitchGroupsCursorWarpConfig(ManagerConfig):
+    cursor_warp = True
+    layouts = [libqtile.layout.Stack(num_stacks=2), libqtile.layout.Max()]
+    groups = [libqtile.config.Group("a"), libqtile.config.Group("b", layout="max")]
 
+
+def test_switch_groups_cursor_warp(manager_nospawn):
     manager_nospawn.start(SwitchGroupsCursorWarpConfig)
 
     manager_nospawn.test_window("one")
@@ -1163,7 +1171,7 @@ def test_switch_groups_cursor_warp(manager_nospawn):
 def test_reload_config(manager_nospawn):
     # The test config uses presence of Qtile.test_data to change config values
     # Here we just want to check configurables are being updated within the live Qtile
-    manager_nospawn.start(lambda: BareConfig(file_path=configs_dir / "reloading.py"))
+    manager_nospawn.start(reloading_config)
 
     @Retry(ignore_exceptions=(AssertionError,))
     def assert_dd_appeared():

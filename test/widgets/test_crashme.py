@@ -6,15 +6,18 @@ import libqtile.confreader
 import libqtile.layout
 from libqtile.command.interface import CommandException
 from libqtile.widget.crashme import _CrashMe
+from test.conftest import MinimalConf
 
 
-def test_crashme_init(manager_nospawn, minimal_conf_noscreen):
-    crash = _CrashMe()
+def crashme_config():
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([_CrashMe()], 10))]
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([crash], 10))]
+    return Conf()
 
-    manager_nospawn.start(config)
+
+def test_crashme_init(manager_nospawn):
+    manager_nospawn.start(crashme_config)
 
     topbar = manager_nospawn.c.bar["top"]
     w = topbar.info()["widgets"][0]

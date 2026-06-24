@@ -1,5 +1,6 @@
 import libqtile.config
 from libqtile.widget.check_updates import CheckUpdates, Popen  # noqa: F401
+from test.conftest import MinimalConf
 from test.widgets.conftest import FakeBar
 
 wrong_distro = "Barch"
@@ -92,33 +93,16 @@ def test_update_available_with_restart_indicator(monkeypatch, fake_qtile, fake_w
     assert text == "Updates: 1*"
 
 
-def test_update_available_with_execute(manager_nospawn, minimal_conf_noscreen, monkeypatch):
-    """test polling after executing command"""
+def check_updates_execute_config():
+    """Build the config in the forkserver child.
 
-    # Use monkeypatching to patch both Popen (for execute command) and call_process
+    Both Popen (for the execute command) and the widget's call_process are
+    patched here, in the child, so they're in place in the qtile process that
+    polls the widget. MockPopen/MockSpawn are module-level so they're picklable.
+    """
+    import libqtile.widget.check_updates as m
 
-    # This class returns None when first polled (to simulate that the task is still running)
-    # and then 0 on the second call.
-    class MockPopen:
-        def __init__(self, *args, **kwargs):
-            self.call_count = 0
-
-        def poll(self):
-            if self.call_count == 0:
-                self.call_count += 1
-                return None
-            return 0
-
-    # Bit of an ugly hack to replicate the above functionality but for a method.
-    class MockSpawn:
-        call_count = 0
-
-        @classmethod
-        def call_process(cls, *args, **kwargs):
-            if cls.call_count == 0:
-                cls.call_count += 1
-                return "Updates"
-            return ""
+    m.Popen = MockPopen
 
     cu6 = CheckUpdates(
         distro=good_distro,
@@ -126,15 +110,19 @@ def test_update_available_with_execute(manager_nospawn, minimal_conf_noscreen, m
         execute="dummy",
         no_update_string=nus,
     )
+    cu6.call_process = MockSpawn.call_process
 
-    # Patch the necessary object
-    monkeypatch.setattr(cu6, "call_process", MockSpawn.call_process)
-    monkeypatch.setattr("libqtile.widget.check_updates.Popen", MockPopen)
+    class CheckUpdatesConf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([cu6], 10))]
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([cu6], 10))]
+    return CheckUpdatesConf()
 
-    manager_nospawn.start(config)
+
+def test_update_available_with_execute(manager_nospawn):
+    """test polling after executing command"""
+
+    # Use monkeypatching to patch both Popen (for execute command) and call_process
+    manager_nospawn.start(check_updates_execute_config)
 
     topbar = manager_nospawn.c.bar["top"]
 

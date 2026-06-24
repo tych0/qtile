@@ -1,3 +1,4 @@
+import functools
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ from libqtile import config, confreader, utils
 from libqtile.bar import Bar
 from libqtile.config import Output, Screen, ScreenRect
 from libqtile.widget import TextBox
+from test.conftest import MinimalConf
 
 configs_dir = Path(__file__).resolve().parent / "configs"
 
@@ -97,37 +99,49 @@ def test_screen_underbar_methods():
     assert one == one
 
 
-def test_screen_serial_ordering_the_order(manager_nospawn, minimal_conf_noscreen, monkeypatch):
-    # no serial numbers in config is ordered in config order
-    minimal_conf_noscreen.screens = [Screen(), Screen()]
+def make_screen(text: str = "") -> Screen:
+    screen = Screen(top=Bar([TextBox(text)], 10))
+    return screen
 
+
+def _patch_get_output_info(backend_name, fn):
+    """Replace the backend Core's get_output_info() in the (forkserver) child.
+
+    The fake outputs need to exist in the qtile process, not in the pytest
+    parent, so the patch is applied here rather than via monkeypatch.
+    """
+    import importlib
+
+    core = importlib.import_module(f"libqtile.backend.{backend_name}.core")
+    core.Core.get_output_info = fn
+
+
+def serial_ordering_config(backend_name):
     def the_order(self) -> list[Output]:
         return [
             Output(None, None, None, "a", ScreenRect(0, 0, 800, 600)),
             Output(None, None, None, "b", ScreenRect(800, 0, 800, 600)),
         ]
 
-    monkeypatch.setattr(
-        f"libqtile.backend.{manager_nospawn.backend.name}.core.Core.get_output_info", the_order
-    )
-    manager_nospawn.start(minimal_conf_noscreen)
+    _patch_get_output_info(backend_name, the_order)
+
+    class Conf(MinimalConf):
+        screens = [Screen(), Screen()]
+
+    return Conf()
+
+
+def test_screen_serial_ordering_the_order(manager_nospawn):
+    # no serial numbers in config is ordered in config order
+    manager_nospawn.start(functools.partial(serial_ordering_config, manager_nospawn.backend.name))
     assert manager_nospawn.c.screen[0].info()["serial"] == "a"
     assert manager_nospawn.c.screen[1].info()["serial"] == "b"
 
 
-def make_screen(text: str = "") -> Screen:
-    screen = Screen(top=Bar([TextBox(text)], 10))
-    return screen
-
-
-def test_generate_screens_too_few(manager_nospawn, minimal_conf_noscreen, monkeypatch):
-    # generate_screens returns fewer screens than outputs; extra outputs should
-    # get default Screen() objects
+def generate_screens_too_few_config(backend_name):
     def gen_screens(outputs: list[Output]) -> list[Screen]:
         # Only return one screen even though there are two outputs
         return [make_screen(text="first")]
-
-    minimal_conf_noscreen.generate_screens = staticmethod(gen_screens)
 
     def two_outputs(self) -> list[Output]:
         return [
@@ -135,10 +149,20 @@ def test_generate_screens_too_few(manager_nospawn, minimal_conf_noscreen, monkey
             Output("DP-2", None, None, "serial_b", ScreenRect(800, 0, 800, 600)),
         ]
 
-    monkeypatch.setattr(
-        f"libqtile.backend.{manager_nospawn.backend.name}.core.Core.get_output_info", two_outputs
+    _patch_get_output_info(backend_name, two_outputs)
+
+    class Conf(MinimalConf):
+        generate_screens = staticmethod(gen_screens)
+
+    return Conf()
+
+
+def test_generate_screens_too_few(manager_nospawn):
+    # generate_screens returns fewer screens than outputs; extra outputs should
+    # get default Screen() objects
+    manager_nospawn.start(
+        functools.partial(generate_screens_too_few_config, manager_nospawn.backend.name)
     )
-    manager_nospawn.start(minimal_conf_noscreen)
 
     # First screen should use the generated screen config
     assert manager_nospawn.c.screen[0].bar["top"].widget["textbox"].get() == "first"
@@ -150,9 +174,7 @@ def test_generate_screens_too_few(manager_nospawn, minimal_conf_noscreen, monkey
     assert len(manager_nospawn.c.get_screens()) == 2
 
 
-def test_generate_screens_too_many(manager_nospawn, minimal_conf_noscreen, monkeypatch):
-    # generate_screens returns more screens than outputs; extra screens should
-    # be ignored
+def generate_screens_too_many_config(backend_name):
     def gen_screens(outputs: list[Output]) -> list[Screen]:
         # Return three screens even though there's only one output
         return [
@@ -161,17 +183,25 @@ def test_generate_screens_too_many(manager_nospawn, minimal_conf_noscreen, monke
             make_screen(text="third"),
         ]
 
-    minimal_conf_noscreen.generate_screens = staticmethod(gen_screens)
-
     def one_output(self) -> list[Output]:
         return [
             Output("DP-1", None, None, "serial_a", ScreenRect(0, 0, 800, 600)),
         ]
 
-    monkeypatch.setattr(
-        f"libqtile.backend.{manager_nospawn.backend.name}.core.Core.get_output_info", one_output
+    _patch_get_output_info(backend_name, one_output)
+
+    class Conf(MinimalConf):
+        generate_screens = staticmethod(gen_screens)
+
+    return Conf()
+
+
+def test_generate_screens_too_many(manager_nospawn):
+    # generate_screens returns more screens than outputs; extra screens should
+    # be ignored
+    manager_nospawn.start(
+        functools.partial(generate_screens_too_many_config, manager_nospawn.backend.name)
     )
-    manager_nospawn.start(minimal_conf_noscreen)
 
     # Only one screen should exist (matching the single output)
     assert len(manager_nospawn.c.get_screens()) == 1
@@ -179,9 +209,7 @@ def test_generate_screens_too_many(manager_nospawn, minimal_conf_noscreen, monke
     assert manager_nospawn.c.screen[0].info()["serial"] == "serial_a"
 
 
-def test_generate_screens_serial_matching(manager_nospawn, minimal_conf_noscreen, monkeypatch):
-    # generate_screens can inspect output serial numbers and return screens
-    # in a specific order based on them
+def generate_screens_serial_matching_config(backend_name):
     def gen_screens(outputs: list[Output]) -> list[Screen]:
         screens = []
         for output in outputs:
@@ -193,18 +221,26 @@ def test_generate_screens_serial_matching(manager_nospawn, minimal_conf_noscreen
                 screens.append(Screen())
         return screens
 
-    minimal_conf_noscreen.generate_screens = staticmethod(gen_screens)
-
     def two_outputs(self) -> list[Output]:
         return [
             Output("DP-1", None, None, "monitor_left", ScreenRect(0, 0, 800, 600)),
             Output("DP-2", None, None, "monitor_right", ScreenRect(800, 0, 800, 600)),
         ]
 
-    monkeypatch.setattr(
-        f"libqtile.backend.{manager_nospawn.backend.name}.core.Core.get_output_info", two_outputs
+    _patch_get_output_info(backend_name, two_outputs)
+
+    class Conf(MinimalConf):
+        generate_screens = staticmethod(gen_screens)
+
+    return Conf()
+
+
+def test_generate_screens_serial_matching(manager_nospawn):
+    # generate_screens can inspect output serial numbers and return screens
+    # in a specific order based on them
+    manager_nospawn.start(
+        functools.partial(generate_screens_serial_matching_config, manager_nospawn.backend.name)
     )
-    manager_nospawn.start(minimal_conf_noscreen)
 
     # Verify screens got the correct config based on their serial number
     assert manager_nospawn.c.screen[0].bar["top"].widget["textbox"].get() == "left_config"

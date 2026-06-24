@@ -4,10 +4,10 @@ import libqtile.confreader
 import libqtile.layout
 from libqtile import widget
 from libqtile.lazy import lazy
+from test.conftest import MinimalConf
 
 
-def test_lazy_callback(manager_nospawn, minimal_conf_noscreen):
-    """Test widgets accept lazy calls"""
+def lazy_callback_config():
     textbox = widget.TextBox(
         text="Testing",
         mouse_callbacks={
@@ -15,10 +15,15 @@ def test_lazy_callback(manager_nospawn, minimal_conf_noscreen):
         },
     )
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([textbox], 10))]
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([textbox], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_lazy_callback(manager_nospawn):
+    """Test widgets accept lazy calls"""
+    manager_nospawn.start(lazy_callback_config)
 
     topbar = manager_nospawn.c.bar["top"]
     assert topbar.widget["textbox"].info()["text"] == "Testing"

@@ -1,4 +1,5 @@
 import sys
+from functools import partial
 from importlib import reload
 from types import ModuleType
 
@@ -7,6 +8,7 @@ import pytest
 import libqtile.config
 import libqtile.widget
 from libqtile.bar import Bar
+from test.conftest import MinimalConf
 
 
 class MockPsutil(ModuleType):
@@ -15,18 +17,22 @@ class MockPsutil(ModuleType):
         return (0.73046875, 0.77587890625, 0.9521484375)
 
 
-@pytest.fixture
-def load_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen, request):
-    widget_config = getattr(request, "param", dict())
-
-    monkeypatch.setitem(sys.modules, "psutil", MockPsutil("psutil"))
+def load_config(widget_config):
+    sys.modules["psutil"] = MockPsutil("psutil")
     from libqtile.widget import load
 
     reload(load)
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([load.Load(**widget_config)], 10))]
 
-    manager_nospawn.start(config)
+    class LoadConf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([load.Load(**widget_config)], 10))]
+
+    return LoadConf()
+
+
+@pytest.fixture
+def load_manager(manager_nospawn, request):
+    widget_config = getattr(request, "param", dict())
+    manager_nospawn.start(partial(load_config, widget_config))
     yield manager_nospawn
 
 

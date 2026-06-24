@@ -1,7 +1,6 @@
 import pickle
 import shutil
 import textwrap
-from multiprocessing import Value
 
 import pytest
 
@@ -14,6 +13,7 @@ from libqtile.ipc import IPCError
 from libqtile.lazy import lazy
 from libqtile.resources import default_config
 from libqtile.widget import TextBox
+from test.helpers import Retry
 from test.helpers import TestManager as BareManager
 
 
@@ -49,6 +49,25 @@ class TwoScreenConfig(Config):
     ]
 
 
+class RestartCounter:
+    def __init__(self):
+        self.count = 0
+
+    def __call__(self):
+        self.count += 1
+
+
+def build_restart_config():
+    """Subscribe a restart-hook counter inside the (forkserver) qtile child.
+
+    The count is read back over IPC via ``self.config.test.count``.
+    """
+    config = TwoScreenConfig()
+    config.test = RestartCounter()
+    hook.subscribe.restart(config.test)
+    return config
+
+
 def test_restart_hook_and_state(manager_nospawn, request, backend, backend_name):
     if backend_name == "wayland":
         pytest.skip("Skipping test on Wayland.")
@@ -70,18 +89,10 @@ def test_restart_hook_and_state(manager_nospawn, request, backend, backend_name)
         """
     )
 
-    # Set up test for restart hook.
-    # Use a counter in manager and increment when hook is fired
-    def inc_restart_call():
-        manager.restart_calls.value += 1
-
-    manager.restart_calls = Value("i", 0)
-    hook.subscribe.restart(inc_restart_call)
-
-    manager.start(TwoScreenConfig)
+    manager.start(build_restart_config)
 
     # Check that hook hasn't been fired yet.
-    assert manager.restart_calls.value == 0
+    assert manager.c.eval("self.config.test.count") == "0"
 
     manager.c.group["c"].toscreen(0)
     manager.c.group["d"].toscreen(1)
@@ -97,7 +108,11 @@ def test_restart_hook_and_state(manager_nospawn, request, backend, backend_name)
     manager.c.restart()
 
     # Check hook fired
-    assert manager.restart_calls.value == 1
+    @Retry(ignore_exceptions=(AssertionError))
+    def assert_restarted():
+        assert manager.c.eval("self.config.test.count") == "1"
+
+    assert_restarted()
 
     # Get the path to the state file
     state_file = manager.c.eval("self.lifecycle.state_file")

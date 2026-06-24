@@ -1,25 +1,31 @@
+from functools import partial
+
 import libqtile.bar
 import libqtile.config
 import libqtile.confreader
 import libqtile.layout
 from libqtile.widget import CurrentLayout
+from test.conftest import MinimalConf
 
 
-def get_widget_config(widget, config):
-    config.screens = [
-        libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10)),
-    ]
-    config.layouts = [
-        libqtile.layout.Columns(),
-        libqtile.layout.Max(),
-        libqtile.layout.Stack(),
-    ]
-    return config
+def make_config(mode=None):
+    kwargs = {} if mode is None else {"mode": mode}
+
+    class Conf(MinimalConf):
+        screens = [
+            libqtile.config.Screen(top=libqtile.bar.Bar([CurrentLayout(**kwargs)], 10)),
+        ]
+        layouts = [
+            libqtile.layout.Columns(),
+            libqtile.layout.Max(),
+            libqtile.layout.Stack(),
+        ]
+
+    return Conf()
 
 
-def test_current_layout(manager_nospawn, minimal_conf_noscreen):
-    config = get_widget_config(CurrentLayout(), minimal_conf_noscreen)
-    manager_nospawn.start(config)
+def test_current_layout(manager_nospawn):
+    manager_nospawn.start(make_config)
     widget = manager_nospawn.c.widget["currentlayout"]
 
     layout = widget.info()["text"]
@@ -51,9 +57,8 @@ def test_current_layout(manager_nospawn, minimal_conf_noscreen):
     assert layout == "columns"
 
 
-def test_current_layout_icon_mode(manager_nospawn, minimal_conf_noscreen):
-    config = get_widget_config(CurrentLayout(mode="icon"), minimal_conf_noscreen)
-    manager_nospawn.start(config)
+def test_current_layout_icon_mode(manager_nospawn):
+    manager_nospawn.start(partial(make_config, mode="icon"))
     widget = manager_nospawn.c.widget["currentlayout"]
     img_length = int(widget.eval("self.img_length"))
     padding = int(widget.eval("self.padding"))
@@ -71,9 +76,8 @@ def test_current_layout_icon_mode(manager_nospawn, minimal_conf_noscreen):
     assert length == img_length + padding * 2
 
 
-def test_current_layout_text_mode(manager_nospawn, minimal_conf_noscreen):
-    config = get_widget_config(CurrentLayout(mode="text"), minimal_conf_noscreen)
-    manager_nospawn.start(config)
+def test_current_layout_text_mode(manager_nospawn):
+    manager_nospawn.start(partial(make_config, mode="text"))
     widget = manager_nospawn.c.widget["currentlayout"]
     img_length = int(widget.eval("self.img_length"))
     padding = int(widget.eval("self.padding"))
@@ -91,9 +95,8 @@ def test_current_layout_text_mode(manager_nospawn, minimal_conf_noscreen):
     assert length == text_length
 
 
-def test_current_layout_both_mode(manager_nospawn, minimal_conf_noscreen):
-    config = get_widget_config(CurrentLayout(mode="both"), minimal_conf_noscreen)
-    manager_nospawn.start(config)
+def test_current_layout_both_mode(manager_nospawn):
+    manager_nospawn.start(partial(make_config, mode="both"))
     widget = manager_nospawn.c.widget["currentlayout"]
     img_length = int(widget.eval("self.img_length"))
     padding = int(widget.eval("self.padding"))

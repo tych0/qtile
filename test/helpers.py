@@ -6,6 +6,7 @@ between test/conftest.py and test/backend/<backend>/conftest.py files.
 """
 
 import faulthandler
+import fcntl
 import functools
 import logging
 import multiprocessing
@@ -136,6 +137,137 @@ def can_connect_qtile(socket_path, *, ok=None):
     return False
 
 
+# Every qtile instance is launched in a "forkserver" child rather than by
+# fork()ing the pytest process directly. The forkserver is a fresh, single
+# threaded interpreter (exec()ed, not forked from us), so the qtile children it
+# forks never inherit the pango/glycin worker threads that in-process rendering
+# and image-decoding tests leave lying around in the pytest process. That kills
+# both the "multi-threaded, use of fork()" DeprecationWarning and the font-map
+# deadlocks (g_cond_wait) that those inherited threads used to cause.
+mp_context = multiprocessing.get_context("forkserver")
+
+# Imports that are heavy but thread-free at import time. Preloading them once in
+# the forkserver means every qtile child inherits them warm. test.helpers may
+# not be importable from the forkserver's default sys.path; an ImportError there
+# is silently ignored by the forkserver and the child imports it on demand.
+_FORKSERVER_PRELOAD = [
+    "libqtile.core.manager",
+    "libqtile.pangocffi",
+    "libqtile.images",
+    "test.helpers",
+]
+
+
+def _forkserver_noop():
+    pass
+
+
+def prime_forkserver():
+    """Start the forkserver now, while the pytest process is still clean.
+
+    Called once at session start (see test/conftest.py). The forkserver is a
+    fresh exec()ed interpreter regardless of when it starts, so this is mostly
+    about pinning the preload list and paying the startup/import cost up front.
+    """
+    multiprocessing.set_forkserver_preload(_FORKSERVER_PRELOAD)
+    proc = mp_context.Process(target=_forkserver_noop)
+    proc.start()
+    proc.join()
+
+
+class _ConnLogHandler(logging.Handler):
+    """Ship formatted log records to the parent over a multiprocessing pipe.
+
+    A forkserver child cannot be handed a raw os.pipe() fd (only Connection
+    objects survive the pickling), so the child's logs go back through a
+    Connection instead of the StreamHandler-over-fd the fork harness used.
+    """
+
+    def __init__(self, conn):
+        super().__init__()
+        self.conn = conn
+
+    def emit(self, record):
+        try:
+            self.conn.send(self.format(record))
+        except Exception:
+            self.handleError(record)
+
+
+def _run_qtile(
+    backend_core,
+    backend_env,
+    backend_args,
+    parent_env,
+    config_class,
+    sockfile,
+    log_level,
+    no_spawn,
+    state,
+    error_conn,
+    log_conn,
+):
+    """Entry point for the forkserver child that runs a qtile instance.
+
+    Everything here must be reconstructable from picklable arguments: the
+    backend Core *class* plus its env/args (not the unpicklable Backend instance,
+    which back-references the TestManager), a module-level config class, and the
+    Connection write ends for startup errors and logging.
+    """
+    try:
+        # A hung child during startup should still dump stacks on SIGUSR2, the
+        # way the fork harness's inherited faulthandler used to.
+        faulthandler.enable(all_threads=True)
+        faulthandler.register(signal.SIGUSR2, all_threads=True)
+
+        # The forkserver was exec()ed early, so it carries a stale environment.
+        # Restore the pytest parent's current environment so the child sees
+        # anything a test set up before start() (e.g. DBUS_SESSION_BUS_ADDRESS),
+        # matching what fork() used to give us for free.
+        os.environ.update(parent_env)
+        os.environ.pop("DISPLAY", None)
+        os.environ.pop("WAYLAND_DISPLAY", None)
+        init_log(log_level)
+        # Initialise fontconfig before starting qtile to prevent races
+        pangocffi.init_fontconfig()
+
+        # Recreate what Backend.create() does, without the Backend instance:
+        # update the environment (wayland's Core reads it at construction).
+        os.environ.update(backend_env)
+
+        handler = _ConnLogHandler(log_conn)
+        handler.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
+        logger.addHandler(handler)
+
+        from libqtile.core.lifecycle import lifecycle
+
+        # Build the config *before* constructing the Core. Config builders run
+        # here (in the child) and may subscribe hooks; the wayland Core fires
+        # screen_change from qw_server_start() during __init__, so the
+        # subscriber must already be registered. With fork() the parent
+        # subscribed before forking and the child inherited it; forkserver has
+        # no such inheritance, so we order the work explicitly.
+        config = config_class()
+        kore = backend_core(*backend_args)
+
+        Qtile(
+            kore,
+            config,
+            socket_path=sockfile,
+            no_spawn=no_spawn,
+            state=state,
+        ).loop()
+        lifecycle._atexit()
+    except Exception:
+        try:
+            error_conn.send(traceback.format_exc())
+        except Exception:
+            pass
+    finally:
+        error_conn.close()
+        log_conn.close()
+
+
 class TestManager:
     """Spawn a Qtile instance
 
@@ -153,7 +285,7 @@ class TestManager:
         self.proc = None
         self.c = None
         self.testwindows = []
-        self.logspipe = None
+        self._log_recv = None
 
     def timeout_handler(self, signum, frame):
         os.kill(self.proc.pid, signal.SIGUSR2)
@@ -177,75 +309,66 @@ class TestManager:
         """Clean up resources"""
         self.terminate()
         self._sockfile.close()
-        if self.logspipe is not None:
-            os.close(self.logspipe)
+        if self._log_recv is not None:
+            self._log_recv.close()
 
     def get_log_buffer(self):
         """Returns any logs that have been written to qtile's log buffer up to this point."""
-        # default pipe size on linux is 64k. we probably won't write
-        # 64k of logs, but in the event that we do, qtile will hang in
-        # write(). but thanks to e1d2dab16903 ("switch semantics of sigusr2
-        # to stack dumping") hopefully we will see it's hung in a log write and
-        # look at this. if we do write 64k of logs, we can do some F_SETPIPE_SZ
-        # fiddling with the buffer size to grow it to whatever github allows.
-        return os.read(self.logspipe, 64 * 1024).decode("utf-8")
+        out = []
+        while self._log_recv.poll():
+            out.append(self._log_recv.recv())
+        return "".join(line + "\n" for line in out)
 
     def start(self, config_class, no_spawn=False, state=None):
-        multiprocessing.set_start_method("fork", force=True)
-        readlogs, writelogs = os.pipe()
-        rpipe, wpipe = multiprocessing.Pipe()
+        # Two child->parent Connections: one for the startup traceback, one for
+        # the qtile log stream. mp_context.Pipe(duplex=False) is backed by an
+        # os.pipe() (not a socketpair), so we can grow the kernel buffer; a
+        # handful of tests drain logs via get_log_buffer() and the rest must not
+        # block qtile in a full-pipe write().
+        error_recv, error_send = mp_context.Pipe(duplex=False)
+        log_recv, log_send = mp_context.Pipe(duplex=False)
+        try:
+            fcntl.fcntl(log_recv.fileno(), fcntl.F_SETPIPE_SZ, LOG_PIPE_BUFFER_SIZE)
+        except (OSError, AttributeError):
+            pass
 
-        def run_qtile():
-            try:
-                rpipe.close()
-                os.environ.pop("DISPLAY", None)
-                os.environ.pop("WAYLAND_DISPLAY", None)
-                init_log(self.log_level)
-                # Initialise fontconfig before starting qtile to prevent races
-                pangocffi.init_fontconfig()
-                kore = self.backend.create()
-                os.environ.update(self.backend.env)
-                from libqtile.core.lifecycle import lifecycle
-
-                os.close(readlogs)
-                formatter = logging.Formatter("%(levelname)s - %(message)s")
-                handler = logging.StreamHandler(os.fdopen(writelogs, "w"))
-                handler.setFormatter(formatter)
-                logger.addHandler(handler)
-
-                Qtile(
-                    kore,
-                    config_class(),
-                    socket_path=self.sockfile,
-                    no_spawn=no_spawn,
-                    state=state,
-                ).loop()
-                lifecycle._atexit()
-            except Exception:
-                wpipe.send(traceback.format_exc())
-            finally:
-                wpipe.close()
-
-        self.proc = multiprocessing.Process(target=run_qtile)
+        self.proc = mp_context.Process(
+            target=_run_qtile,
+            args=(
+                self.backend.core,
+                self.backend.env,
+                tuple(self.backend.args),
+                dict(os.environ),
+                config_class,
+                self.sockfile,
+                self.log_level,
+                no_spawn,
+                state,
+                error_send,
+                log_send,
+            ),
+        )
         self.proc.start()
-        wpipe.close()
-        os.close(writelogs)
-        self.logspipe = readlogs
+        # The write ends now live in the child; drop the parent's copies so the
+        # pipes report EOF/closed correctly once the child exits.
+        error_send.close()
+        log_send.close()
+        self._log_recv = log_recv
 
         # First, wait for socket to appear
         try:
-            if can_connect_qtile(self.sockfile, ok=lambda: not rpipe.poll()):
+            if can_connect_qtile(self.sockfile, ok=lambda: not error_recv.poll()):
                 ipc_client = ipc.Client(self.sockfile)
                 ipc_command = command.interface.IPCCommandInterface(ipc_client)
                 self.c = command.client.InteractiveCommandClient(ipc_command)
                 self.backend.configure(self)
                 return
-            if rpipe.poll(0.1):
-                error = rpipe.recv()
+            if error_recv.poll(0.1):
+                error = error_recv.recv()
                 raise AssertionError(f"Error launching qtile, traceback:\n{error}")
             raise AssertionError("Error launching qtile")
         finally:
-            rpipe.close()
+            error_recv.close()
 
     def create_manager(self, config_class):
         """Create a Qtile manager instance in this thread
@@ -264,8 +387,12 @@ class TestManager:
         return Qtile(kore, config, socket_path=self.sockfile)
 
     def terminate(self):
-        if self.proc is None:
+        if self.proc is None or self.proc._popen is None:
+            # self.proc._popen is None when Process.start() raised (e.g. the
+            # config failed to pickle); there is nothing to terminate, and
+            # calling .terminate() would just mask the real error.
             print("qtile is not alive", file=sys.stderr)
+            self.proc = None
         else:
             # try to send SIGTERM and wait up to 10 sec to quit
             self.proc.terminate()

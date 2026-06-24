@@ -6,16 +6,21 @@ import libqtile.confreader
 import libqtile.layout
 from libqtile import widget
 from libqtile.ipc import IPCError
+from test.conftest import MinimalConf
 
 
-def test_trigger_and_cancel(manager_nospawn, minimal_conf_noscreen):
+def trigger_and_cancel_config():
     # Set a long interval to allow for unanticipated delays in testing environment
     qewidget = widget.QuickExit(timer_interval=100)
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([qewidget], 10))]
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([qewidget], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_trigger_and_cancel(manager_nospawn):
+    manager_nospawn.start(trigger_and_cancel_config)
     topbar = manager_nospawn.c.bar["top"]
 
     # Default text
@@ -33,14 +38,18 @@ def test_trigger_and_cancel(manager_nospawn, minimal_conf_noscreen):
     assert w["text"] == "[ shutdown ]"
 
 
-def test_exit(manager_nospawn, minimal_conf_noscreen):
+def exit_config():
     # Set a short interval and start so widget exits immediately
     qewidget = widget.QuickExit(timer_interval=0.001, countdown_start=1)
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([qewidget], 10))]
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([qewidget], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_exit(manager_nospawn):
+    manager_nospawn.start(exit_config)
     topbar = manager_nospawn.c.bar["top"]
 
     # Click widget to start countdown

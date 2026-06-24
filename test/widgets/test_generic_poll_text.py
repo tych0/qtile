@@ -2,6 +2,7 @@ import pytest
 
 import libqtile
 from libqtile.widget import gen_poll_url, generic_poll_text
+from test.conftest import MinimalConf
 
 
 def test_gen_poll_text():
@@ -85,10 +86,20 @@ async def test_gen_poll_url_custom_headers(httpbin):
     assert result["X-Another-Header"] == "another-value"
 
 
-def test_gen_poll_command(manager_nospawn, minimal_conf_noscreen):
-    gpcommand = generic_poll_text.GenPollCommand(cmd=["echo", "hello"])
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([gpcommand], 10))]
-    manager_nospawn.start(config)
+def genpollcommand_config():
+    class Conf(MinimalConf):
+        screens = [
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar(
+                    [generic_poll_text.GenPollCommand(cmd=["echo", "hello"])], 10
+                )
+            )
+        ]
+
+    return Conf()
+
+
+def test_gen_poll_command(manager_nospawn):
+    manager_nospawn.start(genpollcommand_config)
     command = manager_nospawn.c.widget["genpollcommand"]
     assert command.info()["text"] == "hello"

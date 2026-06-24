@@ -1,3 +1,4 @@
+import functools
 import sys
 from types import ModuleType
 
@@ -42,10 +43,7 @@ def set_progs(progs):
 horizontal_and_vertical = pytest.mark.parametrize("position", ["top", "left"], indirect=True)
 
 
-@pytest.fixture
-def launchbar_manager(request, manager_nospawn, position, progs):
-    config = getattr(request, "param", dict())
-
+def launchbar_config(position, progs, config):
     class LaunchBarConfig(BareConfig):
         screens = [
             Screen(
@@ -58,7 +56,14 @@ def launchbar_manager(request, manager_nospawn, position, progs):
             )
         ]
 
-    manager_nospawn.start(LaunchBarConfig)
+    return LaunchBarConfig()
+
+
+@pytest.fixture
+def launchbar_manager(request, manager_nospawn, position, progs):
+    config = getattr(request, "param", dict())
+
+    manager_nospawn.start(functools.partial(launchbar_config, position, progs, config))
     yield manager_nospawn
 
 

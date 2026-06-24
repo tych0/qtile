@@ -1,3 +1,6 @@
+import functools
+import os
+
 import pytest
 
 import libqtile.bar
@@ -23,13 +26,19 @@ def check_fullscreen(windows, fullscreen=True):
     assert full is fullscreen
 
 
-@pytest.fixture(scope="function")
-def sni_config(request, manager_nospawn):
-    """
-    Fixture provides a manager instance with StatusNotifier in the bar.
+def sni_config(param, dbus_address, vertical=False):
+    """Build a config with StatusNotifier in the bar."""
+    # The forkserver child doesn't inherit the session bus address set by the
+    # `dbus` fixture, so it would otherwise connect to a different bus than the
+    # test window publishes the SNI item on.
+    if dbus_address is not None:
+        os.environ["DBUS_SESSION_BUS_ADDRESS"] = dbus_address
 
-    Widget can be customised via parameterize.
-    """
+    bar = libqtile.bar.Bar([libqtile.widget.StatusNotifier(**param)], 50)
+    if vertical:
+        screen = libqtile.config.Screen(left=bar)
+    else:
+        screen = libqtile.config.Screen(top=bar)
 
     class SNIConfig(libqtile.confreader.Config):
         """Config for the test."""
@@ -42,22 +51,29 @@ def sni_config(request, manager_nospawn):
         ]
         layouts = [libqtile.layout.Max()]
         floating_layout = libqtile.resources.default_config.floating_layout
-        screens = [
-            libqtile.config.Screen(
-                top=libqtile.bar.Bar(
-                    [libqtile.widget.StatusNotifier(**getattr(request, "param", dict()))],
-                    50,
-                ),
-            )
-        ]
+        screens = [screen]
 
-    yield SNIConfig
+    return SNIConfig()
+
+
+@pytest.fixture(scope="function")
+def sni_config_param(request):
+    """
+    Fixture provides the widget kwargs used to build a StatusNotifier config.
+
+    Widget can be customised via parameterize.
+    """
+    yield getattr(request, "param", dict())
 
 
 @pytest.mark.usefixtures("dbus")
-def test_statusnotifier_defaults(manager_nospawn, sni_config):
+def test_statusnotifier_defaults(manager_nospawn, sni_config_param):
     """Check that widget displays and removes icon."""
-    manager_nospawn.start(sni_config)
+    manager_nospawn.start(
+        functools.partial(
+            sni_config, sni_config_param, os.environ.get("DBUS_SESSION_BUS_ADDRESS")
+        )
+    )
     widget = manager_nospawn.c.widget["statusnotifier"]
     assert widget.info()["width"] == 0
 
@@ -70,12 +86,16 @@ def test_statusnotifier_defaults(manager_nospawn, sni_config):
 
 
 @pytest.mark.usefixtures("dbus")
-def test_statusnotifier_defaults_vertical_bar(manager_nospawn, sni_config):
+def test_statusnotifier_defaults_vertical_bar(manager_nospawn, sni_config_param):
     """Check that widget displays and removes icon."""
-    screen = sni_config.screens[0]
-    screen.left = screen.top
-    screen.top = None
-    manager_nospawn.start(sni_config)
+    manager_nospawn.start(
+        functools.partial(
+            sni_config,
+            sni_config_param,
+            os.environ.get("DBUS_SESSION_BUS_ADDRESS"),
+            vertical=True,
+        )
+    )
     widget = manager_nospawn.c.widget["statusnotifier"]
     assert widget.info()["height"] == 0
 
@@ -87,11 +107,15 @@ def test_statusnotifier_defaults_vertical_bar(manager_nospawn, sni_config):
     wait_for_icon(widget, hidden=True, prop="height")
 
 
-@pytest.mark.parametrize("sni_config", [{"icon_size": 35}], indirect=True)
+@pytest.mark.parametrize("sni_config_param", [{"icon_size": 35}], indirect=True)
 @pytest.mark.usefixtures("dbus")
-def test_statusnotifier_icon_size(manager_nospawn, sni_config):
+def test_statusnotifier_icon_size(manager_nospawn, sni_config_param):
     """Check that widget displays and removes icon."""
-    manager_nospawn.start(sni_config)
+    manager_nospawn.start(
+        functools.partial(
+            sni_config, sni_config_param, os.environ.get("DBUS_SESSION_BUS_ADDRESS")
+        )
+    )
     widget = manager_nospawn.c.widget["statusnotifier"]
     assert widget.info()["width"] == 0
 
@@ -105,9 +129,13 @@ def test_statusnotifier_icon_size(manager_nospawn, sni_config):
 
 
 @pytest.mark.usefixtures("dbus")
-def test_statusnotifier_left_click(manager_nospawn, sni_config):
+def test_statusnotifier_left_click(manager_nospawn, sni_config_param):
     """Check `activate` method when left-clicking widget."""
-    manager_nospawn.start(sni_config)
+    manager_nospawn.start(
+        functools.partial(
+            sni_config, sni_config_param, os.environ.get("DBUS_SESSION_BUS_ADDRESS")
+        )
+    )
     widget = manager_nospawn.c.widget["statusnotifier"]
     windows = manager_nospawn.c.windows
 
@@ -133,13 +161,16 @@ def test_statusnotifier_left_click(manager_nospawn, sni_config):
 
 
 @pytest.mark.usefixtures("dbus")
-def test_statusnotifier_left_click_vertical_bar(manager_nospawn, sni_config):
+def test_statusnotifier_left_click_vertical_bar(manager_nospawn, sni_config_param):
     """Check `activate` method when left-clicking widget in vertical bar."""
-    screen = sni_config.screens[0]
-    screen.left = screen.top
-    screen.top = None
-
-    manager_nospawn.start(sni_config)
+    manager_nospawn.start(
+        functools.partial(
+            sni_config,
+            sni_config_param,
+            os.environ.get("DBUS_SESSION_BUS_ADDRESS"),
+            vertical=True,
+        )
+    )
     widget = manager_nospawn.c.widget["statusnotifier"]
     windows = manager_nospawn.c.windows
 

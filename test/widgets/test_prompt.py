@@ -1,8 +1,11 @@
+import functools
+
 import pytest
 
 import libqtile.bar
 import libqtile.config
 from libqtile import widget
+from test.conftest import MinimalConf
 
 
 def get_cursor_markup(cursor_type, selected_char):
@@ -19,15 +22,19 @@ def get_cursor_markup(cursor_type, selected_char):
     return None
 
 
-def test_prompt_focus(manager_nospawn, minimal_conf_noscreen):
-    """Test if focusing the prompt works properly."""
-
+def prompt_focus_config():
     prompt_widget = widget.Prompt()
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([prompt_widget], 10))]
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([prompt_widget], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_prompt_focus(manager_nospawn):
+    """Test if focusing the prompt works properly."""
+
+    manager_nospawn.start(prompt_focus_config)
     pwidget = manager_nospawn.c.widget["prompt"]
 
     # Test if the unfocused default state is reasonable.
@@ -45,18 +52,22 @@ def test_prompt_focus(manager_nospawn, minimal_conf_noscreen):
     assert focus_info["active"]
 
 
-@pytest.mark.parametrize("cursor_type", ["line", "block", "bar", "none"])
-def test_prompt_input(manager_nospawn, minimal_conf_noscreen, cursor_type):
-    """Test if input is working correctly."""
-
+def prompt_cursor_config(cursor_type):
     prompt_widget = widget.Prompt(
         cursor_color="#ff0000", cursor_type=cursor_type, cursorblink=False
     )
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([prompt_widget], 10))]
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([prompt_widget], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+@pytest.mark.parametrize("cursor_type", ["line", "block", "bar", "none"])
+def test_prompt_input(manager_nospawn, cursor_type):
+    """Test if input is working correctly."""
+
+    manager_nospawn.start(functools.partial(prompt_cursor_config, cursor_type))
     pwidget = manager_nospawn.c.widget["prompt"]
 
     # Start the input to the widget and add some text.
@@ -78,17 +89,10 @@ def test_prompt_input(manager_nospawn, minimal_conf_noscreen, cursor_type):
 
 
 @pytest.mark.parametrize("cursor_type", ["line", "block", "bar", "none"])
-def test_prompt_text_escape(manager_nospawn, minimal_conf_noscreen, cursor_type):
+def test_prompt_text_escape(manager_nospawn, cursor_type):
     """Test if special charters are escaped properly."""
 
-    prompt_widget = widget.Prompt(
-        cursor_color="#ff0000", cursor_type=cursor_type, cursorblink=False
-    )
-
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([prompt_widget], 10))]
-
-    manager_nospawn.start(config)
+    manager_nospawn.start(functools.partial(prompt_cursor_config, cursor_type))
     pwidget = manager_nospawn.c.widget["prompt"]
 
     # Start the input to the widget, input some text, and move the cursor.

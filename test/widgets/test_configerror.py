@@ -1,8 +1,11 @@
+import functools
+
 import pytest
 
 import libqtile.bar
 import libqtile.config
 from libqtile.widget.base import _Widget
+from test.conftest import MinimalConf
 
 
 # This widget needs to crash during _configure
@@ -15,15 +18,17 @@ class BadWidget(_Widget):
         pass
 
 
+def configerror_config(position):
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(**{position: libqtile.bar.Bar([BadWidget(length=10)], 10)})]
+
+    return Conf()
+
+
 @pytest.mark.parametrize("position", ["top", "bottom", "left", "right"])
-def test_configerrorwidget(manager_nospawn, minimal_conf_noscreen, position):
+def test_configerrorwidget(manager_nospawn, position):
     """ConfigError widget should show in any bar orientation."""
-    widget = BadWidget(length=10)
-
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(**{position: libqtile.bar.Bar([widget], 10)})]
-
-    manager_nospawn.start(config)
+    manager_nospawn.start(functools.partial(configerror_config, position))
 
     testbar = manager_nospawn.c.bar[position]
     w = testbar.info()["widgets"][0]

@@ -1,3 +1,4 @@
+import functools
 import sys
 from types import ModuleType
 
@@ -5,6 +6,7 @@ import pytest
 
 import libqtile.config
 from libqtile import widget
+from test.conftest import MinimalConf
 
 
 class MockMPD(ModuleType):
@@ -84,22 +86,33 @@ class MockMPD(ModuleType):
             self._index = 3
 
 
+def mpd2_config(param):
+    """Build the config in the forkserver child.
+
+    The mpd module and MPDClient are mocked here, in the child, so they're in
+    place in the qtile process that actually constructs and polls the widget.
+    """
+    sys.modules["mpd"] = MockMPD("mpd")
+    import libqtile.widget.mpd2widget as m
+
+    m.MPDClient = MockMPD.MPDClient
+
+    class MPD2Conf(MinimalConf):
+        screens = [
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar(
+                    [widget.Mpd2(**param)],
+                    50,
+                ),
+            )
+        ]
+
+    return MPD2Conf()
+
+
 @pytest.fixture
-def mpd2_manager(manager_nospawn, monkeypatch, minimal_conf_noscreen, request):
-    monkeypatch.setitem(sys.modules, "mpd", MockMPD("mpd"))
-    monkeypatch.setattr("libqtile.widget.mpd2widget.MPDClient", MockMPD.MPDClient)
-
-    config = minimal_conf_noscreen
-    config.screens = [
-        libqtile.config.Screen(
-            top=libqtile.bar.Bar(
-                [widget.Mpd2(**getattr(request, "param", dict()))],
-                50,
-            ),
-        )
-    ]
-
-    manager_nospawn.start(config)
+def mpd2_manager(manager_nospawn, request):
+    manager_nospawn.start(functools.partial(mpd2_config, getattr(request, "param", dict())))
     yield manager_nospawn
 
 

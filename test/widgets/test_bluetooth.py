@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import multiprocessing
 import os
 import shutil
@@ -176,6 +177,14 @@ class Bluez:
         loop.run_until_complete(self.start_server())
 
 
+def _run_fake_bluez(env):
+    # The daemon runs in a forkserver child, which carries a stale environment;
+    # apply the parent's env so it connects to the same dbus-launch session bus
+    # the widget (also given the parent env) uses.
+    os.environ.update(env)
+    Bluez().run()
+
+
 @pytest.fixture()
 def fake_dbus_daemon(monkeypatch):
     """Start a thread which publishes a fake bluez interface on dbus."""
@@ -209,7 +218,7 @@ def fake_dbus_daemon(monkeypatch):
             except ValueError:
                 pass
 
-    p = multiprocessing.Process(target=Bluez().run)
+    p = multiprocessing.Process(target=_run_fake_bluez, args=(dict(os.environ),))
     p.start()
 
     # Pause for the dbus interface to come up
@@ -223,22 +232,24 @@ def fake_dbus_daemon(monkeypatch):
         p.kill()
 
 
-@pytest.fixture
-def widget(monkeypatch):
-    """Patch the widget to use the fake dbus service."""
-    monkeypatch.setattr("libqtile.widget.bluetooth.BLUEZ_SERVICE", BLUEZ_SERVICE)
+def bluetooth_config(param):
+    """Patch the widget to use the fake dbus service and build the config."""
+    import libqtile.widget.bluetooth
+
+    libqtile.widget.bluetooth.BLUEZ_SERVICE = BLUEZ_SERVICE
     # Make dbus_fast always return the session bus address even if system bus is requested
-    monkeypatch.setattr("libqtile.widget.bluetooth.BusType", ForceSessionBusType)
+    libqtile.widget.bluetooth.BusType = ForceSessionBusType
 
-    yield Bluetooth
+    class BluetoothConfig(BareConfig):
+        screens = [Screen(top=Bar([Bluetooth(**param)], 20))]
+
+    return BluetoothConfig()
 
 
 @pytest.fixture
-def bluetooth_manager(request, widget, fake_dbus_daemon, manager_nospawn):
-    class BluetoothConfig(BareConfig):
-        screens = [Screen(top=Bar([widget(**getattr(request, "param", dict()))], 20))]
-
-    manager_nospawn.start(BluetoothConfig)
+def bluetooth_manager(request, fake_dbus_daemon, manager_nospawn):
+    param = getattr(request, "param", dict())
+    manager_nospawn.start(functools.partial(bluetooth_config, param))
 
     yield manager_nospawn
 

@@ -1,11 +1,14 @@
+import functools
 import textwrap
 
 import pytest
 
 import libqtile.config
+import libqtile.widget
 import libqtile.widget.bluetooth
 from libqtile.bar import Bar
 from libqtile.config import Screen
+from test.conftest import MinimalConf
 from test.helpers import Retry
 
 
@@ -14,12 +17,16 @@ def clipboard_cleared(widget):
     assert widget.info()["text"] == ""
 
 
+def clipboard_config(kwargs):
+    class Conf(MinimalConf):
+        screens = [Screen(top=Bar([libqtile.widget.Clipboard(**kwargs)], 10))]
+
+    return Conf()
+
+
 @pytest.fixture
-def clipboard_manager(request, minimal_conf_noscreen, manager_nospawn):
-    widget = libqtile.widget.Clipboard(**getattr(request, "param", dict()))
-    config = minimal_conf_noscreen
-    config.screens = [Screen(top=Bar([widget], 10))]
-    manager_nospawn.start(config)
+def clipboard_manager(request, manager_nospawn):
+    manager_nospawn.start(functools.partial(clipboard_config, getattr(request, "param", dict())))
 
     if manager_nospawn.backend.name != "x11":
         pytest.skip("Test only available on X11.")

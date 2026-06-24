@@ -1,3 +1,4 @@
+import functools
 import time
 from collections import defaultdict
 
@@ -1410,13 +1411,17 @@ def load_grid(request):
     return getattr(request, "param", False)
 
 
-@pytest.fixture
-def plasma(manager_nospawn, request, load_grid):
+def build_plasma(kwargs):
     class PlasmaConfig(Config):
-        layouts = [Plasma(**getattr(request, "param", dict()))]
+        layouts = [Plasma(**kwargs)]
         screens = [Screen()]
 
-    manager_nospawn.start(PlasmaConfig)
+    return PlasmaConfig()
+
+
+@pytest.fixture
+def plasma(manager_nospawn, request, load_grid):
+    manager_nospawn.start(functools.partial(build_plasma, getattr(request, "param", dict())))
 
     if load_grid:
         manager_nospawn.test_window("a")

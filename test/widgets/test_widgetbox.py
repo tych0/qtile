@@ -2,6 +2,7 @@ import pytest
 
 import libqtile.config
 from libqtile.widget import Systray, TextBox, WidgetBox
+from test.conftest import MinimalConf
 from test.widgets.conftest import FakeBar
 
 
@@ -52,27 +53,35 @@ def test_widgetbox_widget(fake_qtile, fake_window):
     assert fakebar.widgets == [tb_one, tb_two, widget_box]
 
 
-def test_widgetbox_start_opened(manager_nospawn, minimal_conf_noscreen):
-    config = minimal_conf_noscreen
-    tbox = TextBox(text="Text Box")
-    widget_box = WidgetBox(widgets=[tbox], start_opened=True)
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget_box], 10))]
+def start_opened_config():
+    class Conf(MinimalConf):
+        tbox = TextBox(text="Text Box")
+        widget_box = WidgetBox(widgets=[tbox], start_opened=True)
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget_box], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_widgetbox_start_opened(manager_nospawn):
+    manager_nospawn.start(start_opened_config)
 
     topbar = manager_nospawn.c.bar["top"]
     widgets = [w["name"] for w in topbar.info()["widgets"]]
     assert widgets == ["widgetbox", "textbox"]
 
 
-def test_widgetbox_mirror(manager_nospawn, minimal_conf_noscreen):
-    config = minimal_conf_noscreen
-    tbox = TextBox(text="Text Box")
-    config.screens = [
-        libqtile.config.Screen(top=libqtile.bar.Bar([tbox, WidgetBox(widgets=[tbox])], 10))
-    ]
+def mirror_config():
+    class Conf(MinimalConf):
+        tbox = TextBox(text="Text Box")
+        screens = [
+            libqtile.config.Screen(top=libqtile.bar.Bar([tbox, WidgetBox(widgets=[tbox])], 10))
+        ]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_widgetbox_mirror(manager_nospawn):
+    manager_nospawn.start(mirror_config)
 
     manager_nospawn.c.widget["widgetbox"].toggle()
     topbar = manager_nospawn.c.bar["top"]
@@ -80,14 +89,16 @@ def test_widgetbox_mirror(manager_nospawn, minimal_conf_noscreen):
     assert widgets == ["textbox", "widgetbox", "mirror"]
 
 
-def test_widgetbox_mouse_click(manager_nospawn, minimal_conf_noscreen):
-    config = minimal_conf_noscreen
-    tbox = TextBox(text="Text Box")
-    config.screens = [
-        libqtile.config.Screen(top=libqtile.bar.Bar([WidgetBox(widgets=[tbox])], 10))
-    ]
+def mouse_click_config():
+    class Conf(MinimalConf):
+        tbox = TextBox(text="Text Box")
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([WidgetBox(widgets=[tbox])], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_widgetbox_mouse_click(manager_nospawn):
+    manager_nospawn.start(mouse_click_config)
 
     topbar = manager_nospawn.c.bar["top"]
     assert len(topbar.info()["widgets"]) == 1
@@ -99,19 +110,21 @@ def test_widgetbox_mouse_click(manager_nospawn, minimal_conf_noscreen):
     assert len(topbar.info()["widgets"]) == 1
 
 
-def test_widgetbox_with_systray_reconfigure_screens_box_open(
-    manager_nospawn, minimal_conf_noscreen, backend_name
-):
+def systray_config():
+    class Conf(MinimalConf):
+        screens = [
+            libqtile.config.Screen(top=libqtile.bar.Bar([WidgetBox(widgets=[Systray()])], 10))
+        ]
+
+    return Conf()
+
+
+def test_widgetbox_with_systray_reconfigure_screens_box_open(manager_nospawn, backend_name):
     """Check that Systray does not crash when inside an open widgetbox."""
     if backend_name == "wayland":
         pytest.skip("Skipping test on Wayland.")
 
-    config = minimal_conf_noscreen
-    config.screens = [
-        libqtile.config.Screen(top=libqtile.bar.Bar([WidgetBox(widgets=[Systray()])], 10))
-    ]
-
-    manager_nospawn.start(config)
+    manager_nospawn.start(systray_config)
 
     topbar = manager_nospawn.c.bar["top"]
     assert len(topbar.info()["widgets"]) == 1
@@ -126,19 +139,12 @@ def test_widgetbox_with_systray_reconfigure_screens_box_open(
     assert names == ["widgetbox", "systray"]
 
 
-def test_widgetbox_with_systray_reconfigure_screens_box_closed(
-    manager_nospawn, minimal_conf_noscreen, backend_name
-):
+def test_widgetbox_with_systray_reconfigure_screens_box_closed(manager_nospawn, backend_name):
     """Check that Systray does not crash when inside a closed widgetbox."""
     if backend_name == "wayland":
         pytest.skip("Skipping test on Wayland.")
 
-    config = minimal_conf_noscreen
-    config.screens = [
-        libqtile.config.Screen(top=libqtile.bar.Bar([WidgetBox(widgets=[Systray()])], 10))
-    ]
-
-    manager_nospawn.start(config)
+    manager_nospawn.start(systray_config)
 
     topbar = manager_nospawn.c.bar["top"]
     assert len(topbar.info()["widgets"]) == 1
@@ -158,13 +164,17 @@ def test_deprecated_configuration(caplog):
     assert "The use of a positional argument in WidgetBox is deprecated." in caplog.text
 
 
-def test_widgetbox_open_close_commands(manager_nospawn, minimal_conf_noscreen):
-    config = minimal_conf_noscreen
-    tbox = TextBox(text="Text Box")
-    widget_box = WidgetBox(widgets=[tbox])
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget_box], 10))]
+def open_close_commands_config():
+    class Conf(MinimalConf):
+        tbox = TextBox(text="Text Box")
+        widget_box = WidgetBox(widgets=[tbox])
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget_box], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_widgetbox_open_close_commands(manager_nospawn):
+    manager_nospawn.start(open_close_commands_config)
 
     topbar = manager_nospawn.c.bar["top"]
     widget = manager_nospawn.c.widget["widgetbox"]

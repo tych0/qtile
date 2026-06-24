@@ -5,6 +5,7 @@ import libqtile.config
 from libqtile.command.base import expose_command
 from libqtile.widget import Spacer, TextBox
 from libqtile.widget.base import BackgroundPoll, _Widget
+from test.conftest import MinimalConf
 from test.helpers import BareConfig, Retry
 
 
@@ -39,12 +40,16 @@ class PollingWidget(BackgroundPoll):
         return f"Poll count: {self.poll_count}"
 
 
-def test_multiple_timers(minimal_conf_noscreen, manager_nospawn):
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([TimerWidget(10)], 10))]
+def multiple_timers_config():
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([TimerWidget(10)], 10))]
 
+    return Conf()
+
+
+def test_multiple_timers(manager_nospawn):
     # Start manager and check no active timers
-    manager_nospawn.start(config)
+    manager_nospawn.start(multiple_timers_config)
     assert manager_nospawn.c.widget["timerwidget"].get_active_timers() == 0
 
     # Start both timers and confirm both are active
@@ -70,13 +75,18 @@ def test_multiple_timers(minimal_conf_noscreen, manager_nospawn):
     assert manager_nospawn.c.widget["timerwidget"].get_active_timers() == 0
 
 
-def test_mirrors_same_bar(minimal_conf_noscreen, manager_nospawn):
-    """Verify that mirror created when widget reused in same bar."""
-    config = minimal_conf_noscreen
+def mirrors_same_bar_config():
     tbox = TextBox("Testing Mirrors")
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([tbox, tbox], 10))]
 
-    manager_nospawn.start(config)
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([tbox, tbox], 10))]
+
+    return Conf()
+
+
+def test_mirrors_same_bar(manager_nospawn):
+    """Verify that mirror created when widget reused in same bar."""
+    manager_nospawn.start(mirrors_same_bar_config)
     info = manager_nospawn.c.bar["top"].info()["widgets"]
 
     # First instance is retained, second is replaced by mirror
@@ -84,18 +94,25 @@ def test_mirrors_same_bar(minimal_conf_noscreen, manager_nospawn):
     assert [w["name"] for w in info] == ["textbox", "mirror"]
 
 
-def test_mirrors_different_bar(minimal_conf_noscreen, manager_nospawn):
-    """Verify that mirror created when widget reused in different bar."""
-    config = minimal_conf_noscreen
+def mirrors_different_bar_config():
     tbox = TextBox("Testing Mirrors")
-    config.fake_screens = [
-        libqtile.config.Screen(top=libqtile.bar.Bar([tbox], 10), x=0, y=0, width=400, height=600),
-        libqtile.config.Screen(
-            top=libqtile.bar.Bar([tbox], 10), x=400, y=0, width=400, height=600
-        ),
-    ]
 
-    manager_nospawn.start(config)
+    class Conf(MinimalConf):
+        fake_screens = [
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar([tbox], 10), x=0, y=0, width=400, height=600
+            ),
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar([tbox], 10), x=400, y=0, width=400, height=600
+            ),
+        ]
+
+    return Conf()
+
+
+def test_mirrors_different_bar(manager_nospawn):
+    """Verify that mirror created when widget reused in different bar."""
+    manager_nospawn.start(mirrors_different_bar_config)
     screen0 = manager_nospawn.c.screen[0].bar["top"].info()["widgets"]
     screen1 = manager_nospawn.c.screen[1].bar["top"].info()["widgets"]
 
@@ -108,21 +125,26 @@ def test_mirrors_different_bar(minimal_conf_noscreen, manager_nospawn):
     assert [w["name"] for w in screen1] == ["mirror"]
 
 
-def test_mirrors_stretch(minimal_conf_noscreen, manager_nospawn):
-    """Verify that mirror widgets stretch according to their own bar"""
-    config = minimal_conf_noscreen
+def mirrors_stretch_config():
     tbox = TextBox("Testing Mirrors")
     stretch = Spacer()
-    config.fake_screens = [
-        libqtile.config.Screen(
-            top=libqtile.bar.Bar([stretch, tbox], 10), x=0, y=0, width=600, height=600
-        ),
-        libqtile.config.Screen(
-            top=libqtile.bar.Bar([stretch, tbox], 10), x=600, y=0, width=200, height=600
-        ),
-    ]
 
-    manager_nospawn.start(config)
+    class Conf(MinimalConf):
+        fake_screens = [
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar([stretch, tbox], 10), x=0, y=0, width=600, height=600
+            ),
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar([stretch, tbox], 10), x=600, y=0, width=200, height=600
+            ),
+        ]
+
+    return Conf()
+
+
+def test_mirrors_stretch(manager_nospawn):
+    """Verify that mirror widgets stretch according to their own bar"""
+    manager_nospawn.start(mirrors_stretch_config)
     screen0 = manager_nospawn.c.screen[0].bar["top"].info()["widgets"]
     screen1 = manager_nospawn.c.screen[1].bar["top"].info()["widgets"]
 
@@ -132,13 +154,16 @@ def test_mirrors_stretch(minimal_conf_noscreen, manager_nospawn):
     assert screen1[0]["length"] == 200 - screen1[1]["length"]
 
 
-def test_threadpolltext_force_update(minimal_conf_noscreen, manager_nospawn):
-    """Check that widget can be polled instantly via command interface."""
-    config = minimal_conf_noscreen
-    tpoll = PollingWidget("Not polled")
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([tpoll], 10))]
+def threadpolltext_force_update_config():
+    class Conf(MinimalConf):
+        screens = [libqtile.config.Screen(top=libqtile.bar.Bar([PollingWidget("Not polled")], 10))]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_threadpolltext_force_update(manager_nospawn):
+    """Check that widget can be polled instantly via command interface."""
+    manager_nospawn.start(threadpolltext_force_update_config)
     widget = manager_nospawn.c.widget["pollingwidget"]
 
     # Widget is polled immediately when configured
@@ -149,13 +174,20 @@ def test_threadpolltext_force_update(minimal_conf_noscreen, manager_nospawn):
     assert widget.info()["text"] == "Poll count: 2"
 
 
-def test_threadpolltext_update_interval_none(minimal_conf_noscreen, manager_nospawn):
-    """Check that widget will be polled only once if update_interval == None"""
-    config = minimal_conf_noscreen
-    tpoll = PollingWidget("Not polled", update_interval=None)
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([tpoll], 10))]
+def threadpolltext_update_interval_none_config():
+    class Conf(MinimalConf):
+        screens = [
+            libqtile.config.Screen(
+                top=libqtile.bar.Bar([PollingWidget("Not polled", update_interval=None)], 10)
+            )
+        ]
 
-    manager_nospawn.start(config)
+    return Conf()
+
+
+def test_threadpolltext_update_interval_none(manager_nospawn):
+    """Check that widget will be polled only once if update_interval == None"""
+    manager_nospawn.start(threadpolltext_update_interval_none_config)
     widget = manager_nospawn.c.widget["pollingwidget"]
 
     # Widget is polled immediately when configured

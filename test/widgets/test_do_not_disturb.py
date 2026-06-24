@@ -1,3 +1,5 @@
+import functools
+
 import pytest
 
 from libqtile.config import Bar, Screen
@@ -23,32 +25,27 @@ def mock_check_output(args):
     return status.encode()
 
 
-@pytest.fixture(scope="function")
-def patched_dnd(monkeypatch):
-    monkeypatch.setattr("libqtile.widget.do_not_disturb.check_output", mock_check_output)
-
-    class PatchedDND(dnd.DoNotDisturb):
-        def __init__(self, **config):
-            dnd.DoNotDisturb.__init__(self, **config)
-            DunstStatus.PAUSED = False
-            self.mouse_callbacks = {"Button1": lambda: DunstStatus.toggle()}
-            self.name = "donotdisturb"
-
-    yield PatchedDND
+class PatchedDND(dnd.DoNotDisturb):
+    def __init__(self, **config):
+        dnd.DoNotDisturb.__init__(self, **config)
+        DunstStatus.PAUSED = False
+        self.mouse_callbacks = {"Button1": lambda: DunstStatus.toggle()}
+        self.name = "donotdisturb"
 
 
-@pytest.fixture(scope="function")
-def dnd_manager(manager_nospawn, request, patched_dnd):
+def dnd_config(param):
+    dnd.check_output = mock_check_output
+
     class GroupConfig(Config):
-        screens = [
-            Screen(
-                top=Bar(
-                    [patched_dnd(update_interval=10, **getattr(request, "param", dict()))], 30
-                )
-            )
-        ]
+        screens = [Screen(top=Bar([PatchedDND(update_interval=10, **param)], 30))]
 
-    manager_nospawn.start(GroupConfig)
+    return GroupConfig()
+
+
+@pytest.fixture(scope="function")
+def dnd_manager(manager_nospawn, request):
+    param = getattr(request, "param", dict())
+    manager_nospawn.start(functools.partial(dnd_config, param))
 
     yield manager_nospawn
 

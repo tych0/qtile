@@ -1,25 +1,32 @@
+import functools
+
 import pytest
 
 import libqtile.config
+import libqtile.resources.default_config
 from libqtile import layout
 from libqtile.config import Match
 from libqtile.confreader import Config
 from test.layouts.layout_utils import assert_dimensions
 
 
-@pytest.fixture(scope="function")
-def ss_manager(manager_nospawn, request):
+def build_ss(kwargs):
     class ScreenSplitConfig(Config):
         auto_fullscreen = True
         groups = [libqtile.config.Group("a")]
-        layouts = [layout.ScreenSplit(**getattr(request, "param", dict()))]
+        layouts = [layout.ScreenSplit(**kwargs)]
         floating_layout = libqtile.resources.default_config.floating_layout
         keys = []
         mouse = []
         screens = []
         follow_mouse_focus = False
 
-    manager_nospawn.start(ScreenSplitConfig)
+    return ScreenSplitConfig()
+
+
+@pytest.fixture(scope="function")
+def ss_manager(manager_nospawn, request):
+    manager_nospawn.start(functools.partial(build_ss, getattr(request, "param", dict())))
 
     yield manager_nospawn
 

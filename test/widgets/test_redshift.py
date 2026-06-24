@@ -1,3 +1,5 @@
+import functools
+
 import pytest
 
 from libqtile.config import Bar, Screen
@@ -9,30 +11,30 @@ def mock_run(argv, check):
     pass
 
 
-@pytest.fixture(scope="function")
-def patched_redshift(monkeypatch):
-    class PatchedRedshift(redshift.Redshift):
-        def __init__(self, **config):
-            monkeypatch.setattr("subprocess.run", mock_run)
-            redshift.Redshift.__init__(self, **config)
-            self.name = "redshift"
-
-    yield PatchedRedshift
+class PatchedRedshift(redshift.Redshift):
+    def __init__(self, **config):
+        redshift.Redshift.__init__(self, **config)
+        self.name = "redshift"
 
 
-@pytest.fixture(scope="function")
-def redshift_manager(manager_nospawn, request, patched_redshift):
-    if manager_nospawn.backend.name == "wayland":
-        pytest.skip("Skipping test on Wayland.")
+def redshift_config(param):
+    """Build the config in the forkserver child.
+
+    subprocess.run is patched here, in the child, so redshift is never actually
+    invoked by the qtile process that runs the widget.
+    """
+    import subprocess
+
+    subprocess.run = mock_run
 
     class GroupConfig(Config):
         screens = [
             Screen(
                 top=Bar(
                     [
-                        patched_redshift(
+                        PatchedRedshift(
                             update_interval=10,
-                            **getattr(request, "param", dict()),
+                            **param,
                         )
                     ],
                     30,
@@ -40,7 +42,15 @@ def redshift_manager(manager_nospawn, request, patched_redshift):
             )
         ]
 
-    manager_nospawn.start(GroupConfig)
+    return GroupConfig()
+
+
+@pytest.fixture(scope="function")
+def redshift_manager(manager_nospawn, request):
+    if manager_nospawn.backend.name == "wayland":
+        pytest.skip("Skipping test on Wayland.")
+
+    manager_nospawn.start(functools.partial(redshift_config, getattr(request, "param", dict())))
 
     yield manager_nospawn
 

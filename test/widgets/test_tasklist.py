@@ -1,9 +1,12 @@
+import functools
+
 import pytest
 
 import libqtile.config
 from libqtile import bar, layout
 from libqtile.config import Screen
 from libqtile.confreader import Config
+from libqtile.widget import tasklist
 from libqtile.widget.tasklist import TaskList
 from test.layouts.layout_utils import assert_focused
 from test.test_scratchpad import is_spawned, spawn_cmd
@@ -40,11 +43,8 @@ no_xdg = pytest.mark.parametrize("override_xdg", [False], indirect=True)
 horizontal_and_vertical = pytest.mark.parametrize("position", ["top", "left"], indirect=True)
 
 
-@pytest.fixture
-def tasklist_manager(request, manager_nospawn, override_xdg, monkeypatch, position):
-    monkeypatch.setattr("libqtile.widget.tasklist.has_xdg", override_xdg)
-
-    config = getattr(request, "param", dict())
+def tasklist_config(override_xdg, position, config):
+    tasklist.has_xdg = override_xdg
 
     class TasklistConfig(Config):
         auto_fullscreen = True
@@ -66,7 +66,14 @@ def tasklist_manager(request, manager_nospawn, override_xdg, monkeypatch, positi
             Screen(**{position: bar.Bar([TaskListTestWidget(name="tasklist", **config)], 28)})
         ]
 
-    manager_nospawn.start(TasklistConfig)
+    return TasklistConfig()
+
+
+@pytest.fixture
+def tasklist_manager(request, manager_nospawn, override_xdg, position):
+    config = getattr(request, "param", dict())
+
+    manager_nospawn.start(functools.partial(tasklist_config, override_xdg, position, config))
     yield manager_nospawn
 
 

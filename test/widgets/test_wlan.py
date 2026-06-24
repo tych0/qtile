@@ -1,5 +1,6 @@
 import builtins
 import sys
+from functools import partial
 from importlib import reload
 from types import ModuleType
 
@@ -7,6 +8,7 @@ import pytest
 
 import libqtile.config
 from libqtile.bar import Bar
+from test.conftest import MinimalConf
 
 
 def no_op(*args, **kwargs):
@@ -63,6 +65,18 @@ def patched_wlan(monkeypatch):
     yield wlan
 
 
+def wlan_config(kwargs):
+    sys.modules["iwlib"] = MockIwlib("iwlib")
+    from libqtile.widget import wlan
+
+    reload(wlan)
+
+    class WlanConf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([wlan.Wlan(**kwargs)], 10))]
+
+    return WlanConf()
+
+
 @pytest.mark.parametrize(
     "kwargs,expected",
     [
@@ -71,11 +85,8 @@ def patched_wlan(monkeypatch):
         ({"interface": "wlan1"}, "Disconnected"),
     ],
 )
-def test_wlan_display(minimal_conf_noscreen, manager_nospawn, patched_wlan, kwargs, expected):
-    widget = patched_wlan.Wlan(**kwargs)
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([widget], 10))]
-    manager_nospawn.start(config)
+def test_wlan_display(manager_nospawn, kwargs, expected):
+    manager_nospawn.start(partial(wlan_config, kwargs))
 
     text = manager_nospawn.c.bar["top"].info()["widgets"][0]["text"]
     assert text == expected

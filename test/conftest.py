@@ -2,7 +2,20 @@ import pytest
 
 import libqtile
 from libqtile.backend.base import drawer
-from test.helpers import BareConfig, TestManager
+from test.helpers import BareConfig, TestManager, prime_forkserver
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _forkserver():
+    """Start the qtile-launching forkserver before any test runs.
+
+    Priming it here, while the pytest process is still single-threaded, pins the
+    preload list once and pays the startup cost up front. Every qtile instance
+    is then forked from this clean server rather than from the (eventually
+    pango/glycin-thread-polluted) pytest process.
+    """
+    prime_forkserver()
+    yield
 
 
 def pytest_addoption(parser):
@@ -95,14 +108,6 @@ def manager(request, manager_nospawn):
 
 
 @pytest.fixture(scope="function")
-def manager_withlogs(request, manager_nospawn):
-    config = getattr(request, "param", BareConfig)
-
-    manager_nospawn.start(config, want_logs=True)
-    yield manager_nospawn
-
-
-@pytest.fixture(scope="function")
 def fake_window():
     """
     A fake window that can provide a fake drawer to test widgets.
@@ -125,20 +130,21 @@ def anyio_backend():
     return "asyncio"
 
 
-# Fixture that defines a minimal configuration that has no screens.
-# When used in a test, the function needs to receive a list of screens
-# (including bar and widgets) as an argument. This config can then be
-# passed to the manager to start.
+# Minimal configuration that has no screens. When used in a test, the test
+# needs to set `screens` (including bar and widgets) before passing it to the
+# manager to start. Defined at module level (not inside the fixture) so it is
+# picklable by reference and can be sent to the forkserver child.
+class MinimalConf(libqtile.confreader.Config):
+    auto_fullscreen = False
+    keys = []
+    mouse = []
+    groups = [libqtile.config.Group("a"), libqtile.config.Group("b")]
+    layouts = [libqtile.layout.stack.Stack(num_stacks=1)]
+    floating_layout = libqtile.resources.default_config.floating_layout
+    screens = []
+    reconfigure_screens = False
+
+
 @pytest.fixture(scope="function")
 def minimal_conf_noscreen():
-    class MinimalConf(libqtile.confreader.Config):
-        auto_fullscreen = False
-        keys = []
-        mouse = []
-        groups = [libqtile.config.Group("a"), libqtile.config.Group("b")]
-        layouts = [libqtile.layout.stack.Stack(num_stacks=1)]
-        floating_layout = libqtile.resources.default_config.floating_layout
-        screens = []
-        reconfigure_screens = False
-
     return MinimalConf

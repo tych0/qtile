@@ -8,6 +8,7 @@ import pytest
 import libqtile.config
 import libqtile.widget
 from libqtile.bar import Bar
+from test.conftest import MinimalConf
 
 
 class MockPsutil(ModuleType):
@@ -23,17 +24,21 @@ def set_io_ticks(temp_file, io_ticks):
     temp_file.flush()
 
 
-@pytest.fixture
-def hdd_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
-    monkeypatch.setitem(sys.modules, "psutil", MockPsutil("psutil"))
+def hdd_config():
+    sys.modules["psutil"] = MockPsutil("psutil")
     from libqtile.widget import hdd
 
     reload(hdd)
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([hdd.HDD()], 10))]
+    class HDDConf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([hdd.HDD()], 10))]
 
-    manager_nospawn.start(config)
+    return HDDConf()
+
+
+@pytest.fixture
+def hdd_manager(manager_nospawn):
+    manager_nospawn.start(hdd_config)
     yield manager_nospawn
 
 

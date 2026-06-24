@@ -1,3 +1,5 @@
+import functools
+
 import pytest
 
 from libqtile import layout
@@ -6,13 +8,17 @@ from libqtile.confreader import Config
 from libqtile.widget import plasma
 
 
-@pytest.fixture(scope="function")
-def plasma_manager(manager_nospawn, request):
+def build_plasma(kwargs):
     class PlasmaConfig(Config):
         layouts = [layout.Plasma()]
-        screens = [Screen(top=Bar([plasma.Plasma(**getattr(request, "param", dict()))], 30))]
+        screens = [Screen(top=Bar([plasma.Plasma(**kwargs)], 30))]
 
-    manager_nospawn.start(PlasmaConfig)
+    return PlasmaConfig()
+
+
+@pytest.fixture(scope="function")
+def plasma_manager(manager_nospawn, request):
+    manager_nospawn.start(functools.partial(build_plasma, getattr(request, "param", dict())))
 
     yield manager_nospawn
 

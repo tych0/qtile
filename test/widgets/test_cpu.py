@@ -7,6 +7,7 @@ import pytest
 import libqtile.config
 import libqtile.widget
 from libqtile.bar import Bar
+from test.conftest import MinimalConf
 
 
 class MockPsutil(ModuleType):
@@ -27,17 +28,27 @@ class MockPsutil(ModuleType):
         return Freq()
 
 
-@pytest.fixture
-def cpu_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
-    monkeypatch.setitem(sys.modules, "psutil", MockPsutil("psutil"))
+def cpu_config():
+    """Build the CPU-widget config in the forkserver child.
+
+    psutil is mocked and the widget is constructed here (not in the pytest
+    parent) so the mock and the widget instance exist in the qtile process that
+    actually polls them, rather than relying on fork() to carry them across.
+    """
+    sys.modules["psutil"] = MockPsutil("psutil")
     from libqtile.widget import cpu
 
     reload(cpu)
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=Bar([cpu.CPU()], 10))]
+    class CPUConf(MinimalConf):
+        screens = [libqtile.config.Screen(top=Bar([cpu.CPU()], 10))]
 
-    manager_nospawn.start(config)
+    return CPUConf()
+
+
+@pytest.fixture
+def cpu_manager(manager_nospawn):
+    manager_nospawn.start(cpu_config)
     yield manager_nospawn
 
 

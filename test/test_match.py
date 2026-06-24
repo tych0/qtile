@@ -1,3 +1,4 @@
+import functools
 import re
 
 import pytest
@@ -7,17 +8,21 @@ from libqtile.config import Match, Screen
 from libqtile.confreader import Config
 
 
-@pytest.fixture(scope="function")
-def manager(manager_nospawn, request):
-    class MatchConfig(Config):
-        rules = getattr(request, "param", list())
-        if not isinstance(rules, list | tuple):
-            rules = [rules]
+def build_match_config(rules):
+    if not isinstance(rules, list | tuple):
+        rules = [rules]
 
+    class MatchConfig(Config):
         screens = [Screen()]
         floating_layout = layout.Floating(float_rules=[*rules])
 
-    manager_nospawn.start(MatchConfig)
+    return MatchConfig()
+
+
+@pytest.fixture(scope="function")
+def manager(manager_nospawn, request):
+    rules = getattr(request, "param", list())
+    manager_nospawn.start(functools.partial(build_match_config, rules))
 
     yield manager_nospawn
 

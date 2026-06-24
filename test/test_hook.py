@@ -1,11 +1,12 @@
 import asyncio
-from multiprocessing import Value
+import functools
 
 import pytest
 
 import libqtile.log_utils
 import libqtile.utils
 from libqtile import hook, layout
+from libqtile.log_utils import logger
 from libqtile.resources import default_config
 from test.conftest import BareConfig, dualmonitor
 from test.helpers import Retry
@@ -29,6 +30,42 @@ def hook_fixture():
     libqtile.log_utils.init_log()
     yield
     hook.clear()
+
+
+# The qtile child is launched in a forkserver process (see test/helpers.py), so
+# it does not inherit any hook subscriptions made in the pytest parent. Tests
+# that need a hook subscribed in the running qtile instead pass a *config
+# builder* to start(): a module-level callable that runs in the child, builds a
+# config, subscribes the hook there, and stashes the recording object on
+# `config.test`. The parent reads the result back over IPC with
+# `manager.c.eval("self.config.test.<attr>")`.
+
+
+class Counter:
+    """Hook handler that counts how many times it fires (ignoring any args)."""
+
+    def __init__(self):
+        self.count = 0
+
+    def __call__(self, *args, **kwargs):
+        self.count += 1
+
+
+def build_hook_config(hook_name, call_factory=Counter, base=BareConfig):
+    """Build a config that subscribes ``call_factory()`` to ``hook_name``.
+
+    Runs in the forkserver child via ``start()``. The recording object is left
+    on ``config.test`` so the parent can read it with ``manager.c.eval``.
+    """
+    config = base()
+    config.test = call_factory()
+    getattr(hook.subscribe, hook_name)(config.test)
+    return config
+
+
+@Retry(ignore_exceptions=(AssertionError))
+def assert_count(mgr_nospawn, num):
+    assert mgr_nospawn.c.eval("self.config.test.count") == str(num)
 
 
 def test_cannot_fire_unknown_event():
@@ -111,41 +148,49 @@ def test_can_unsubscribe_from_hook():
     assert test.val == 3
 
 
-def test_can_subscribe_to_startup_hooks(manager_nospawn):
-    config = BareConfig
+class StartupCounters:
+    def __init__(self):
+        self.once = 0
+        self.startup = 0
+        self.complete = 0
+
+
+def build_startup_config():
+    config = BareConfig()
     for attr in dir(default_config):
         if not hasattr(config, attr):
             setattr(config, attr, getattr(default_config, attr))
+    config.test = StartupCounters()
+
+    def inc(name):
+        def _(*args, **kwargs):
+            setattr(config.test, name, getattr(config.test, name) + 1)
+
+        return _
+
+    hook.subscribe.startup_once(inc("once"))
+    hook.subscribe.startup(inc("startup"))
+    hook.subscribe.startup_complete(inc("complete"))
+    return config
+
+
+def test_can_subscribe_to_startup_hooks(manager_nospawn):
     manager = manager_nospawn
 
-    manager.startup_once_calls = Value("i", 0)
-    manager.startup_calls = Value("i", 0)
-    manager.startup_complete_calls = Value("i", 0)
+    manager.start(build_startup_config)
+    # The fresh child fired each startup hook exactly once.
+    assert manager.c.eval("self.config.test.once") == "1"
+    assert manager.c.eval("self.config.test.startup") == "1"
+    assert manager.c.eval("self.config.test.complete") == "1"
 
-    def inc_startup_once_calls():
-        manager.startup_once_calls.value += 1
-
-    def inc_startup_calls():
-        manager.startup_calls.value += 1
-
-    def inc_startup_complete_calls():
-        manager.startup_complete_calls.value += 1
-
-    hook.subscribe.startup_once(inc_startup_once_calls)
-    hook.subscribe.startup(inc_startup_calls)
-    hook.subscribe.startup_complete(inc_startup_complete_calls)
-
-    manager.start(config)
-    assert manager.startup_once_calls.value == 1
-    assert manager.startup_calls.value == 1
-    assert manager.startup_complete_calls.value == 1
-
-    # Restart and check that startup_once doesn't fire again
+    # Restart (a new child) and check that startup_once does NOT fire again,
+    # while startup / startup_complete do. Each child counts independently, so
+    # the restarted child reports once == 0 rather than a cumulative total.
     manager.terminate()
-    manager.start(config, no_spawn=True)
-    assert manager.startup_once_calls.value == 1
-    assert manager.startup_calls.value == 2
-    assert manager.startup_complete_calls.value == 2
+    manager.start(build_startup_config, no_spawn=True)
+    assert manager.c.eval("self.config.test.once") == "0"
+    assert manager.c.eval("self.config.test.startup") == "1"
+    assert manager.c.eval("self.config.test.complete") == "1"
 
 
 @pytest.mark.usefixtures("hook_fixture")
@@ -204,87 +249,92 @@ def test_custom_hook_registry():
         hook.fire("test_hook")
 
 
-@pytest.mark.usefixtures("hook_fixture")
-def test_user_hook(manager_nospawn):
-    config = BareConfig
+class UserHookText:
+    def __init__(self):
+        self.no_arg_text = "A"
+        self.text = "A"
+
+    def set_text(self):
+        self.no_arg_text = "B"
+
+    def define_text(self, text):
+        self.text = text
+
+
+def build_user_hook_config():
+    config = BareConfig()
     for attr in dir(default_config):
         if not hasattr(config, attr):
             setattr(config, attr, getattr(default_config, attr))
+    config.test = UserHookText()
+    hook.subscribe.user("set_text")(config.test.set_text)
+    hook.subscribe.user("define_text")(config.test.define_text)
+    return config
+
+
+@pytest.mark.usefixtures("hook_fixture")
+def test_user_hook(manager_nospawn):
     manager = manager_nospawn
 
-    manager.custom_no_arg_text = Value("u", "A")
-    manager.custom_text = Value("u", "A")
-
-    # Define two functions: first takes no args, second takes a single arg
-    def predefined_text():
-        with manager.custom_no_arg_text.get_lock():
-            manager.custom_no_arg_text.value = "B"
-
-    def defined_text(text):
-        with manager.custom_text.get_lock():
-            manager.custom_text.value = text
-
-    hook.subscribe.user("set_text")(predefined_text)
-    hook.subscribe.user("define_text")(defined_text)
-
     # Check values are as initialised
-    manager.start(config)
-    assert manager.custom_no_arg_text.value == "A"
-    assert manager.custom_text.value == "A"
+    manager.start(build_user_hook_config)
+    assert manager.c.eval("self.config.test.no_arg_text") == "A"
+    assert manager.c.eval("self.config.test.text") == "A"
 
     # Check hooked function with no args
     manager.c.fire_user_hook("set_text")
-    assert manager.custom_no_arg_text.value == "B"
+    assert manager.c.eval("self.config.test.no_arg_text") == "B"
 
     # Check hooked function with a single arg
     manager.c.fire_user_hook("define_text", "C")
-    assert manager.custom_text.value == "C"
+    assert manager.c.eval("self.config.test.text") == "C"
+
+
+def build_shutdown_config():
+    config = BareConfig()
+
+    def on_shutdown():
+        logger.warning("shutdown hook fired")
+
+    hook.subscribe.shutdown(on_shutdown)
+    return config
 
 
 def test_shutdown(manager_nospawn):
-    def inc_shutdown_calls():
-        manager_nospawn.shutdown_calls.value += 1
-
-    manager_nospawn.shutdown_calls = Value("i", 0)
-    hook.subscribe.shutdown(inc_shutdown_calls)
-
-    manager_nospawn.start(BareConfig)
+    manager_nospawn.start(build_shutdown_config)
     manager_nospawn.c.shutdown()
-    assert manager_nospawn.shutdown_calls.value == 1
+
+    # The shutdown hook fires as the child exits, so the IPC connection is gone;
+    # read the confirmation back off the qtile log stream instead.
+    @Retry(ignore_exceptions=(AssertionError))
+    def assert_shutdown_logged():
+        assert "shutdown hook fired" in manager_nospawn.get_log_buffer()
+
+    assert_shutdown_logged()
 
 
 @dualmonitor
 def test_setgroup(manager_nospawn):
-    @Retry(ignore_exceptions=(AssertionError))
-    def assert_inc_calls(num: int):
-        assert manager_nospawn.setgroup_calls.value == num
-
-    def inc_setgroup_calls():
-        manager_nospawn.setgroup_calls.value += 1
-
-    manager_nospawn.setgroup_calls = Value("i", 0)
-    hook.subscribe.setgroup(inc_setgroup_calls)
-
     # Starts with two because of the dual screen
-    manager_nospawn.start(BareConfig)
-    assert_inc_calls(2)
+    manager_nospawn.start(functools.partial(build_hook_config, "setgroup"))
+    assert_count(manager_nospawn, 2)
 
     manager_nospawn.c.switch_groups("a", "b")
-    assert_inc_calls(3)
+    assert_count(manager_nospawn, 3)
 
     manager_nospawn.c.to_screen(1)
-    assert_inc_calls(4)
+    assert_count(manager_nospawn, 4)
     manager_nospawn.c.to_screen(1)
-    assert_inc_calls(4)
+    assert_count(manager_nospawn, 4)
 
     manager_nospawn.c.next_screen()
-    assert_inc_calls(5)
+    assert_count(manager_nospawn, 5)
 
     manager_nospawn.c.prev_screen()
-    assert_inc_calls(6)
+    assert_count(manager_nospawn, 6)
 
     manager_nospawn.c.group.switch_groups("b")
-    assert_inc_calls(7)
+    assert_count(manager_nospawn, 7)
 
 
 class CallGroupname:
@@ -302,11 +352,7 @@ def assert_groupname(mgr_nospawn, groupname):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_addgroup(manager_nospawn):
-    class AddgroupConfig(BareConfig):
-        test = CallGroupname()
-        hook.subscribe.addgroup(test)
-
-    manager_nospawn.start(AddgroupConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "addgroup", CallGroupname))
     assert_groupname(manager_nospawn, "d")
     manager_nospawn.c.addgroup("e")
     assert_groupname(manager_nospawn, "e")
@@ -314,11 +360,7 @@ def test_addgroup(manager_nospawn):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_delgroup(manager_nospawn):
-    class DelgroupConfig(BareConfig):
-        test = CallGroupname()
-        hook.subscribe.delgroup(test)
-
-    manager_nospawn.start(DelgroupConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "delgroup", CallGroupname))
     manager_nospawn.c.delgroup("e")
     assert_groupname(manager_nospawn, "")
     manager_nospawn.c.delgroup("d")
@@ -326,119 +368,89 @@ def test_delgroup(manager_nospawn):
 
 
 def test_changegroup(manager_nospawn):
-    @Retry(ignore_exceptions=(AssertionError))
-    def assert_inc_calls(num: int):
-        assert manager_nospawn.changegroup_calls.value == num
-
-    def inc_changegroup_calls():
-        manager_nospawn.changegroup_calls.value += 1
-
-    manager_nospawn.changegroup_calls = Value("i", 0)
-    hook.subscribe.changegroup(inc_changegroup_calls)
-
     # Starts with four beacuase of four groups in BareConfig
-    manager_nospawn.start(BareConfig)
-    assert_inc_calls(4)
+    manager_nospawn.start(functools.partial(build_hook_config, "changegroup"))
+    assert_count(manager_nospawn, 4)
 
     manager_nospawn.c.group.set_label("Test")
-    assert_inc_calls(5)
+    assert_count(manager_nospawn, 5)
 
     manager_nospawn.c.addgroup("e")
-    assert_inc_calls(6)
+    assert_count(manager_nospawn, 6)
     manager_nospawn.c.addgroup("e")
-    assert_inc_calls(6)
+    assert_count(manager_nospawn, 6)
 
     manager_nospawn.c.delgroup("e")
-    assert_inc_calls(7)
+    assert_count(manager_nospawn, 7)
     manager_nospawn.c.delgroup("e")
-    assert_inc_calls(7)
+    assert_count(manager_nospawn, 7)
 
 
 def test_focus_change(manager_nospawn):
-    @Retry(ignore_exceptions=(AssertionError))
-    def assert_inc_calls(num: int):
-        assert manager_nospawn.focus_change_calls.value == num
-
-    def inc_focus_change_calls():
-        manager_nospawn.focus_change_calls.value += 1
-
-    manager_nospawn.focus_change_calls = Value("i", 0)
-    hook.subscribe.focus_change(inc_focus_change_calls)
-
-    manager_nospawn.start(BareConfig)
-    assert_inc_calls(1)
+    manager_nospawn.start(functools.partial(build_hook_config, "focus_change"))
+    assert_count(manager_nospawn, 1)
 
     manager_nospawn.test_window("Test Window")
-    assert_inc_calls(2)
+    assert_count(manager_nospawn, 2)
 
     manager_nospawn.c.group.focus_by_index(0)
-    assert_inc_calls(3)
+    assert_count(manager_nospawn, 3)
     manager_nospawn.c.group.focus_by_index(1)
-    assert_inc_calls(3)
+    assert_count(manager_nospawn, 3)
 
     manager_nospawn.test_window("Test Focus Change")
-    assert_inc_calls(4)
+    assert_count(manager_nospawn, 4)
 
     manager_nospawn.c.group.focus_back()
-    assert_inc_calls(5)
+    assert_count(manager_nospawn, 5)
 
     manager_nospawn.c.group.focus_by_name("Test Focus Change")
-    assert_inc_calls(6)
+    assert_count(manager_nospawn, 6)
     manager_nospawn.c.group.focus_by_name("Test Focus")
-    assert_inc_calls(6)
+    assert_count(manager_nospawn, 6)
 
     manager_nospawn.c.group.next_window()
-    assert_inc_calls(7)
+    assert_count(manager_nospawn, 7)
 
     manager_nospawn.c.group.prev_window()
-    assert_inc_calls(8)
+    assert_count(manager_nospawn, 8)
 
     manager_nospawn.c.window.kill()
-    assert_inc_calls(9)
+    assert_count(manager_nospawn, 9)
 
 
 def test_float_change(manager_nospawn):
-    @Retry(ignore_exceptions=(AssertionError))
-    def assert_inc_calls(num: int):
-        assert manager_nospawn.float_change_calls.value == num
-
-    def inc_float_change_calls():
-        manager_nospawn.float_change_calls.value += 1
-
-    manager_nospawn.float_change_calls = Value("i", 0)
-    hook.subscribe.float_change(inc_float_change_calls)
-
-    manager_nospawn.start(BareConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "float_change"))
     manager_nospawn.test_window("Test Window")
 
     manager_nospawn.c.window.enable_floating()
-    assert_inc_calls(1)
+    assert_count(manager_nospawn, 1)
     manager_nospawn.c.window.enable_floating()
-    assert_inc_calls(1)
+    assert_count(manager_nospawn, 1)
 
     manager_nospawn.c.window.disable_floating()
-    assert_inc_calls(2)
+    assert_count(manager_nospawn, 2)
     manager_nospawn.c.window.disable_floating()
-    assert_inc_calls(2)
+    assert_count(manager_nospawn, 2)
 
     manager_nospawn.c.window.toggle_floating()
-    assert_inc_calls(3)
+    assert_count(manager_nospawn, 3)
 
     manager_nospawn.c.window.toggle_floating()
     manager_nospawn.c.window.move_floating(0, 0)
-    assert_inc_calls(5)
+    assert_count(manager_nospawn, 5)
 
     manager_nospawn.c.window.toggle_floating()
     manager_nospawn.c.window.resize_floating(10, 10)
-    assert_inc_calls(7)
+    assert_count(manager_nospawn, 7)
 
     manager_nospawn.c.window.toggle_floating()
     manager_nospawn.c.window.set_position_floating(0, 0)
-    assert_inc_calls(9)
+    assert_count(manager_nospawn, 9)
 
     manager_nospawn.c.window.toggle_floating()
     manager_nospawn.c.window.set_size_floating(100, 100)
-    assert_inc_calls(11)
+    assert_count(manager_nospawn, 11)
 
 
 class CallGroupWindow:
@@ -459,22 +471,18 @@ def assert_group_window(mgr_nospawn, group, window):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_group_window_add(manager_nospawn):
-    class AddGroupWindowConfig(BareConfig):
-        test = CallGroupWindow()
-        hook.subscribe.group_window_add(test)
-
-    manager_nospawn.start(AddGroupWindowConfig)
+    manager_nospawn.start(
+        functools.partial(build_hook_config, "group_window_add", CallGroupWindow)
+    )
     manager_nospawn.test_window("Test Window")
     assert_group_window(manager_nospawn, "a", "Test Window")
 
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_group_window_remove(manager_nospawn):
-    class RemoveGroupWindowConfig(BareConfig):
-        test = CallGroupWindow()
-        hook.subscribe.group_window_remove(test)
-
-    manager_nospawn.start(RemoveGroupWindowConfig)
+    manager_nospawn.start(
+        functools.partial(build_hook_config, "group_window_remove", CallGroupWindow)
+    )
     manager_nospawn.test_window("Test Window")
     manager_nospawn.c.window.kill()
     assert_group_window(manager_nospawn, "a", "Test Window")
@@ -497,22 +505,14 @@ def assert_window(mgr_nospawn, window):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_client_new(manager_nospawn):
-    class ClientNewConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.client_new(test)
-
-    manager_nospawn.start(ClientNewConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "client_new", CallWindow))
     manager_nospawn.test_window("Test Client")
     assert_window(manager_nospawn, "Test Client")
 
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_client_managed(manager_nospawn):
-    class ClientManagedConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.client_managed(test)
-
-    manager_nospawn.start(ClientManagedConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "client_managed", CallWindow))
     manager_nospawn.test_window("Test Client")
     assert_window(manager_nospawn, "Test Client")
 
@@ -524,11 +524,7 @@ def test_client_managed(manager_nospawn):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_client_killed(manager_nospawn):
-    class ClientKilledConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.client_killed(test)
-
-    manager_nospawn.start(ClientKilledConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "client_killed", CallWindow))
     manager_nospawn.test_window("Test Client")
     manager_nospawn.c.window.kill()
     assert_window(manager_nospawn, "Test Client")
@@ -536,11 +532,7 @@ def test_client_killed(manager_nospawn):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_client_focus(manager_nospawn):
-    class ClientFocusConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.client_focus(test)
-
-    manager_nospawn.start(ClientFocusConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "client_focus", CallWindow))
     manager_nospawn.test_window("Test Client")
     assert_window(manager_nospawn, "Test Client")
 
@@ -551,11 +543,9 @@ def test_client_focus(manager_nospawn):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_client_mouse_enter(manager_nospawn):
-    class ClientMouseEnterConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.client_mouse_enter(test)
-
-    manager_nospawn.start(ClientMouseEnterConfig)
+    manager_nospawn.start(
+        functools.partial(build_hook_config, "client_mouse_enter", CallWindow)
+    )
     manager_nospawn.test_window("Test Client")
     manager_nospawn.backend.fake_click(0, 0)
     assert_window(manager_nospawn, "Test Client")
@@ -563,11 +553,9 @@ def test_client_mouse_enter(manager_nospawn):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_client_focus_by_click(manager_nospawn):
-    class ClientMouseClickConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.client_focus_by_click(test)
-
-    manager_nospawn.start(ClientMouseClickConfig)
+    manager_nospawn.start(
+        functools.partial(build_hook_config, "client_focus_by_click", CallWindow)
+    )
     manager_nospawn.test_window("Test Client")
 
     manager_nospawn.backend.fake_click(0, 0)
@@ -582,22 +570,18 @@ def test_client_focus_by_click(manager_nospawn):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_client_name_updated(manager_nospawn):
-    class ClientNameUpdatedConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.client_name_updated(test)
-
-    manager_nospawn.start(ClientNameUpdatedConfig)
+    manager_nospawn.start(
+        functools.partial(build_hook_config, "client_name_updated", CallWindow)
+    )
     manager_nospawn.test_window("Test Client", new_title="Test NameUpdated")
     assert_window(manager_nospawn, "Test NameUpdated")
 
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_client_urgent_hint_changed(manager_nospawn):
-    class ClientUrgentHintChangedConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.client_urgent_hint_changed(test)
-
-    manager_nospawn.start(ClientUrgentHintChangedConfig)
+    manager_nospawn.start(
+        functools.partial(build_hook_config, "client_urgent_hint_changed", CallWindow)
+    )
     manager_nospawn.test_window("Test Client", urgent=True)
     manager_nospawn.c.screen.next_group()
     assert_window(manager_nospawn, "Test Client")
@@ -618,6 +602,10 @@ class CallLayoutGroup:
         self.group = group.name
 
 
+class LayoutChangeConfig(BareConfig):
+    layouts = [layout.stack.Stack(), layout.columns.Columns()]
+
+
 @Retry(ignore_exceptions=(AssertionError))
 def assert_layout_group(mgr_nospawn, layout, group):
     assert mgr_nospawn.c.eval("self.config.test.layout") == layout
@@ -626,12 +614,9 @@ def assert_layout_group(mgr_nospawn, layout, group):
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_layout_change(manager_nospawn):
-    class ClientLayoutChange(BareConfig):
-        layouts = [layout.stack.Stack(), layout.columns.Columns()]
-        test = CallLayoutGroup()
-        hook.subscribe.layout_change(test)
-
-    manager_nospawn.start(ClientLayoutChange)
+    manager_nospawn.start(
+        functools.partial(build_hook_config, "layout_change", CallLayoutGroup, LayoutChangeConfig)
+    )
     assert_layout_group(manager_nospawn, "stack", "a")
 
     manager_nospawn.c.group.setlayout("columns")
@@ -658,73 +643,41 @@ def test_net_wm_icon_change(manager_nospawn, backend_name):
     if backend_name == "wayland":
         pytest.skip("X11 only.")
 
-    class ClientNewConfig(BareConfig):
-        test = CallWindow()
-        hook.subscribe.net_wm_icon_change(test)
-
-    manager_nospawn.start(ClientNewConfig)
+    manager_nospawn.start(
+        functools.partial(build_hook_config, "net_wm_icon_change", CallWindow)
+    )
     manager_nospawn.test_window("Test Client")
     assert_window(manager_nospawn, "Test Client")
 
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_screen_change(manager_nospawn):
-    @Retry(ignore_exceptions=(AssertionError))
-    def assert_inc_calls(num: int):
-        assert manager_nospawn.screen_change_calls.value == num
-
-    def inc_screen_change_calls(event):
-        manager_nospawn.screen_change_calls.value += 1
-
-    manager_nospawn.screen_change_calls = Value("i", 0)
-    hook.subscribe.screen_change(inc_screen_change_calls)
-
-    manager_nospawn.start(BareConfig)
-    assert_inc_calls(1)
+    manager_nospawn.start(functools.partial(build_hook_config, "screen_change"))
+    assert_count(manager_nospawn, 1)
 
 
 @pytest.mark.usefixtures("hook_fixture")
 def test_screens_reconfigured(manager_nospawn):
-    @Retry(ignore_exceptions=(AssertionError))
-    def assert_inc_calls(num: int):
-        assert manager_nospawn.screens_reconfigured_calls.value == num
-
-    def inc_screens_reconfigured_calls():
-        manager_nospawn.screens_reconfigured_calls.value += 1
-
-    manager_nospawn.screens_reconfigured_calls = Value("i", 0)
-    hook.subscribe.screens_reconfigured(inc_screens_reconfigured_calls)
-
-    manager_nospawn.start(BareConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "screens_reconfigured"))
     manager_nospawn.c.reconfigure_screens()
-    assert_inc_calls(1)
+    assert_count(manager_nospawn, 1)
 
 
 @dualmonitor
 @pytest.mark.usefixtures("hook_fixture")
 def test_current_screen_change(manager_nospawn):
-    @Retry(ignore_exceptions=(AssertionError))
-    def assert_inc_calls(num: int):
-        assert manager_nospawn.current_screen_change_calls.value == num
-
-    def inc_current_screen_change_calls():
-        manager_nospawn.current_screen_change_calls.value += 1
-
-    manager_nospawn.current_screen_change_calls = Value("i", 0)
-    hook.subscribe.current_screen_change(inc_current_screen_change_calls)
-
-    manager_nospawn.start(BareConfig)
+    manager_nospawn.start(functools.partial(build_hook_config, "current_screen_change"))
 
     manager_nospawn.c.to_screen(1)
-    assert_inc_calls(1)
+    assert_count(manager_nospawn, 1)
     manager_nospawn.c.to_screen(1)
-    assert_inc_calls(1)
+    assert_count(manager_nospawn, 1)
 
     manager_nospawn.c.next_screen()
-    assert_inc_calls(2)
+    assert_count(manager_nospawn, 2)
 
     manager_nospawn.c.prev_screen()
-    assert_inc_calls(3)
+    assert_count(manager_nospawn, 3)
 
 
 @pytest.mark.usefixtures("hook_fixture")

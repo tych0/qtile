@@ -1,43 +1,52 @@
 import pytest
 
-import libqtile.bar
 import libqtile.config
-import libqtile.layout
+from libqtile.bar import Bar
 from libqtile.confreader import Config
 from libqtile.extension.window_list import WindowList
+from libqtile.layout.max import Max
 from libqtile.lazy import lazy
 
 
-@pytest.fixture
-def extension_manager(monkeypatch, manager_nospawn):
+# We want the value returned immediately
+def fake_popen(cmd, *args, **kwargs):
+    class PopenObj:
+        def communicate(self, value_in, *args):
+            return [value_in, None]
+
+    return PopenObj()
+
+
+def build_window_list_config():
+    # Patch Popen and build the extension in the (forkserver) qtile child so
+    # the extension runs against the fake Popen when its keybinding fires.
+    from libqtile.extension import base
+
+    base.Popen = fake_popen
+
     extension = WindowList()
-
-    # We want the value returned immediately
-    def fake_popen(cmd, *args, **kwargs):
-        class PopenObj:
-            def communicate(self, value_in, *args):
-                return [value_in, None]
-
-        return PopenObj()
-
-    monkeypatch.setattr("libqtile.extension.base.Popen", fake_popen)
 
     class ManagerConfig(Config):
         groups = [
             libqtile.config.Group("a"),
             libqtile.config.Group("b"),
         ]
-        layouts = [libqtile.layout.max.Max()]
+        layouts = [Max()]
         keys = [
             libqtile.config.Key(["control"], "k", lazy.run_extension(extension)),
         ]
         screens = [
             libqtile.config.Screen(
-                bottom=libqtile.bar.Bar([], 20),
+                bottom=Bar([], 20),
             )
         ]
 
-    manager_nospawn.start(ManagerConfig)
+    return ManagerConfig()
+
+
+@pytest.fixture
+def extension_manager(manager_nospawn):
+    manager_nospawn.start(build_window_list_config)
 
     yield manager_nospawn
 

@@ -342,6 +342,12 @@ def set_steal_focus(group, win):
         win.can_steal_focus = False
 
 
+def build_anti_focus_steal_config():
+    config = BareConfig()
+    hook.subscribe.group_window_add(set_steal_focus)
+    return config
+
+
 @pytest.fixture
 def hook_fixture():
     log_utils.init_log()
@@ -354,11 +360,7 @@ def test_can_steal_focus(manager_nospawn):
     """
     Test Window.can_steal_focus.
     """
-
-    class AntiFocusStealConfig(BareConfig):
-        hook.subscribe.group_window_add(set_steal_focus)
-
-    manager_nospawn.start(AntiFocusStealConfig)
+    manager_nospawn.start(build_anti_focus_steal_config)
     manager_nospawn.test_window("one")
     assert_unfocused(manager_nospawn, "one")
 

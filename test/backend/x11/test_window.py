@@ -1,8 +1,8 @@
+import functools
 import os
 import shutil
 import subprocess
 import tempfile
-from multiprocessing import Value
 
 import pytest
 import xcffib.xproto
@@ -19,6 +19,7 @@ from test.helpers import (
     SECOND_WIDTH,
     WIDTH,
     BareConfig,
+    Retry,
     assert_window_died,
     window_by_name,
 )
@@ -84,68 +85,69 @@ class FuncConfig(BareConfig):
     focus_on_window_activation = staticmethod(set_urgent)
 
 
+class UrgentCounter:
+    def __init__(self):
+        self.count = 0
+
+    def __call__(self, *args):
+        self.count += 1
+
+
+def build_urgent_config(base):
+    """Subscribe a client_urgent_hint_changed counter inside the qtile child."""
+    config = base()
+    config.test = UrgentCounter()
+    hook.subscribe.client_urgent_hint_changed(config.test)
+    return config
+
+
 @dualmonitor
 def test_urgent_hook_fire(xmanager_nospawn):
     xmanager_nospawn.display = xmanager_nospawn.backend.env["DISPLAY"]
     conn = Connection(xmanager_nospawn.display)
 
-    xmanager_nospawn.hook_fired = Value("i", 0)
+    data = xcffib.xproto.ClientMessageData.synthetic([0, 0, 0, 0, 0], "IIIII")
 
-    def _hook_test(val):
-        xmanager_nospawn.hook_fired.value += 1
+    # Each qtile here is a separate forkserver child, so it counts hook fires
+    # independently; read its own count back over IPC before terminating it.
+    @Retry(ignore_exceptions=(AssertionError))
+    def assert_hook_fired():
+        assert xmanager_nospawn.c.eval("self.config.test.count") == "1"
 
-    hook.subscribe.client_urgent_hint_changed(_hook_test)
+    def activate(window_id):
+        ev = xcffib.xproto.ClientMessageEvent.synthetic(
+            32, window_id, conn.atoms["_NET_ACTIVE_WINDOW"], data
+        )
+        conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
+        conn.xsync()
 
-    xmanager_nospawn.start(UrgentConfig)
+    xmanager_nospawn.start(functools.partial(build_urgent_config, UrgentConfig))
 
     xmanager_nospawn.test_window("one")
     window_info = xmanager_nospawn.c.window.info()
-
-    # send activate window message
-    data = xcffib.xproto.ClientMessageData.synthetic([0, 0, 0, 0, 0], "IIIII")
-    ev = xcffib.xproto.ClientMessageEvent.synthetic(
-        32, window_info["id"], conn.atoms["_NET_ACTIVE_WINDOW"], data
-    )
-    conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
-    conn.xsync()
-
+    activate(window_info["id"])
+    assert_hook_fired()
     xmanager_nospawn.terminate()
-    assert xmanager_nospawn.hook_fired.value == 1
 
     # test that focus_on_window_activation = "smart" also fires the hook
-    xmanager_nospawn.start(SmartConfig, no_spawn=True)
+    xmanager_nospawn.start(functools.partial(build_urgent_config, SmartConfig), no_spawn=True)
 
     xmanager_nospawn.test_window("one")
     window_info = xmanager_nospawn.c.window.info()
     xmanager_nospawn.c.window.toscreen(1)
-
-    # send activate window message
-    ev = xcffib.xproto.ClientMessageEvent.synthetic(
-        32, window_info["id"], conn.atoms["_NET_ACTIVE_WINDOW"], data
-    )
-    conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
-    conn.xsync()
+    activate(window_info["id"])
+    assert_hook_fired()
     xmanager_nospawn.terminate()
-
-    assert xmanager_nospawn.hook_fired.value == 2
 
     # test that a custom function also fires the hook
-    xmanager_nospawn.start(FuncConfig, no_spawn=True)
+    xmanager_nospawn.start(functools.partial(build_urgent_config, FuncConfig), no_spawn=True)
 
     xmanager_nospawn.test_window("one")
     window_info = xmanager_nospawn.c.window.info()
     xmanager_nospawn.c.window.toscreen(1)
-
-    # send activate window message
-    ev = xcffib.xproto.ClientMessageEvent.synthetic(
-        32, window_info["id"], conn.atoms["_NET_ACTIVE_WINDOW"], data
-    )
-    conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
-    conn.xsync()
-
+    activate(window_info["id"])
+    assert_hook_fired()
     xmanager_nospawn.terminate()
-
-    assert xmanager_nospawn.hook_fired.value == 3
 
 
 @manager_config

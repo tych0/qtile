@@ -1,4 +1,5 @@
 import datetime
+import functools
 
 import pytest
 
@@ -21,42 +22,41 @@ class MockDatetime(datetime.datetime):
         return self + tzone.utcoffset(None)
 
 
-@pytest.fixture
-def patched_clock(monkeypatch):
+class VClockTestWidget(vertical_clock.VerticalClock):
+    def __init__(self, **config):
+        vertical_clock.VerticalClock.__init__(self, **config)
+        self.name = "verticalclock"
+
+    def info(self):
+        info = vertical_clock.VerticalClock.info(self)
+        info["text"] = "|".join(layout.text for layout in self.layouts)
+        return info
+
+
+def vclock_config(param):
     # Override datetime.
     # This is key for testing as we can fix time.
-    monkeypatch.setattr("libqtile.widget.vertical_clock.datetime", MockDatetime)
+    vertical_clock.datetime = MockDatetime
 
-    class TestVerticalClock(vertical_clock.VerticalClock):
-        def __init__(self, **config):
-            vertical_clock.VerticalClock.__init__(self, **config)
-            self.name = "verticalclock"
-
-        def info(self):
-            info = vertical_clock.VerticalClock.info(self)
-            info["text"] = "|".join(layout.text for layout in self.layouts)
-            return info
-
-    yield TestVerticalClock
-
-
-@pytest.fixture(scope="function")
-def vclock_manager(manager_nospawn, request, patched_clock):
     class VClockConfig(BareConfig):
         screens = [
             Screen(
                 left=Bar(
                     [
-                        patched_clock(
-                            **getattr(request, "param", dict()),
-                        )
+                        VClockTestWidget(**param),
                     ],
                     30,
                 )
             )
         ]
 
-    manager_nospawn.start(VClockConfig)
+    return VClockConfig()
+
+
+@pytest.fixture(scope="function")
+def vclock_manager(manager_nospawn, request):
+    param = getattr(request, "param", dict())
+    manager_nospawn.start(functools.partial(vclock_config, param))
 
     yield manager_nospawn
 

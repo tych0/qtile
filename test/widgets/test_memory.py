@@ -1,4 +1,5 @@
 import sys
+from functools import partial
 from importlib import reload
 from types import ModuleType
 
@@ -6,6 +7,7 @@ import pytest
 
 import libqtile.bar
 import libqtile.config
+from test.conftest import MinimalConf
 
 
 def no_op(*args, **kwargs):
@@ -33,23 +35,23 @@ class FakePsutil(ModuleType):
             self.percent = 0.0
 
 
-@pytest.fixture()
-def patched_memory(
-    monkeypatch,
-):
-    monkeypatch.setitem(sys.modules, "psutil", FakePsutil("psutil"))
+def memory_config(widget_kwargs):
+    sys.modules["psutil"] = FakePsutil("psutil")
     from libqtile.widget import memory
 
     reload(memory)
-    return memory
+
+    class MemoryConf(MinimalConf):
+        screens = [
+            libqtile.config.Screen(top=libqtile.bar.Bar([memory.Memory(**widget_kwargs)], 10))
+        ]
+
+    return MemoryConf()
 
 
-def test_memory_defaults(manager_nospawn, minimal_conf_noscreen, patched_memory):
+def test_memory_defaults(manager_nospawn):
     """Test no text when free space over threshold"""
-    widget = patched_memory.Memory()
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
-    manager_nospawn.start(config)
+    manager_nospawn.start(partial(memory_config, {}))
     assert manager_nospawn.c.widget["memory"].info()["text"] == " 2417M/ 7802M"
 
 
@@ -62,11 +64,8 @@ def test_memory_defaults(manager_nospawn, minimal_conf_noscreen, patched_memory)
         ("B", " 2534260736B/ 8180686848B"),
     ],
 )
-def test_memory_units(manager_nospawn, minimal_conf_noscreen, patched_memory, unit, expects):
+def test_memory_units(manager_nospawn, unit, expects):
     """Test no text when free space over threshold"""
-    widget = patched_memory.Memory(measure_mem=unit)
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
-    manager_nospawn.start(config)
+    manager_nospawn.start(partial(memory_config, {"measure_mem": unit}))
     manager_nospawn.c.widget["memory"].eval("self.update(self.poll())")
     assert manager_nospawn.c.widget["memory"].info()["text"] == expects
