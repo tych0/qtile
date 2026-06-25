@@ -217,6 +217,12 @@ def test_text_battery_error(monkeypatch):
     assert text == "Error: err"
 
 
+# setup_images() decodes images in-process (libqtile.images -> cairocffi.pixbuf
+# -> glycin), which leaves fork-unsafe glycin state behind, so any qtile fork()ed
+# afterwards would deadlock loading an image. These three tests are reordered to
+# run after every qtile-launching test (see conftest.pytest_collection_modifyitems);
+# only they are marked, not the whole module, since the rest launch a qtile.
+@pytest.mark.decodes_image
 def test_images_fail():
     """Test BatteryIcon() with a bad theme_path
 
@@ -227,6 +233,7 @@ def test_images_fail():
         batt.setup_images()
 
 
+@pytest.mark.decodes_image
 def test_images_good(tmpdir, fake_bar, svg_img_as_pypath):
     """Test BatteryIcon() with a good theme_path
 
@@ -245,6 +252,7 @@ def test_images_good(tmpdir, fake_bar, svg_img_as_pypath):
         assert isinstance(img, images.Img)
 
 
+@pytest.mark.decodes_image
 def test_images_default(fake_bar):
     """Test BatteryIcon() with the default theme_path
 

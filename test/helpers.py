@@ -10,10 +10,12 @@ import functools
 import logging
 import multiprocessing
 import os
+import select
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 from abc import ABCMeta, abstractmethod
@@ -154,6 +156,15 @@ class TestManager:
         self.c = None
         self.testwindows = []
         self.logspipe = None
+        # qtile's logs are streamed to us over a pipe. A background thread
+        # drains that pipe continuously into self._log_buffer so the pipe can
+        # never fill up: if it did, qtile would block in write() during startup
+        # and never become reachable (showing up as a spurious "Error launching
+        # qtile"). See _start_log_reader().
+        self._log_buffer = b""
+        self._log_lock = threading.Lock()
+        self._log_reader = None
+        self._log_reader_stop = None
 
     def timeout_handler(self, signum, frame):
         os.kill(self.proc.pid, signal.SIGUSR2)
@@ -177,41 +188,112 @@ class TestManager:
         """Clean up resources"""
         self.terminate()
         self._sockfile.close()
+        self._stop_log_reader()
+
+    def _start_log_reader(self, readfd):
+        """Spawn a thread that continuously drains qtile's log pipe.
+
+        We must read the pipe continuously rather than on demand: the pipe only
+        buffers ~64k, and if it fills, qtile blocks in write() and never finishes
+        starting up. Everything read is accumulated in self._log_buffer so it
+        remains available to get_log_buffer() and _dump_logs().
+        """
+        self.logspipe = readfd
+        with self._log_lock:
+            self._log_buffer = b""
+        stop = threading.Event()
+        self._log_reader_stop = stop
+
+        def reader():
+            while True:
+                # Use select with a timeout instead of a blocking read so we can
+                # notice the stop event even if qtile has gone quiet, and so we
+                # never close the fd out from under a blocked read.
+                readable, _, _ = select.select([readfd], [], [], 0.1)
+                if readable:
+                    try:
+                        data = os.read(readfd, 65536)
+                    except OSError:
+                        break
+                    if not data:
+                        break  # EOF: qtile's write end closed, i.e. it exited
+                    with self._log_lock:
+                        self._log_buffer += data
+                elif stop.is_set():
+                    break
+
+        thread = threading.Thread(target=reader, name="qtile-log-reader", daemon=True)
+        thread.start()
+        self._log_reader = thread
+
+    def _stop_log_reader(self):
+        if self._log_reader is not None:
+            if self._log_reader_stop is not None:
+                self._log_reader_stop.set()
+            self._log_reader.join(timeout=5)
+            self._log_reader = None
+            self._log_reader_stop = None
         if self.logspipe is not None:
-            os.close(self.logspipe)
+            try:
+                os.close(self.logspipe)
+            except OSError:
+                pass
+            self.logspipe = None
 
     def get_log_buffer(self):
-        """Returns any logs that have been written to qtile's log buffer up to this point."""
-        # default pipe size on linux is 64k. we probably won't write
-        # 64k of logs, but in the event that we do, qtile will hang in
-        # write(). but thanks to e1d2dab16903 ("switch semantics of sigusr2
-        # to stack dumping") hopefully we will see it's hung in a log write and
-        # look at this. if we do write 64k of logs, we can do some F_SETPIPE_SZ
-        # fiddling with the buffer size to grow it to whatever github allows.
-        return os.read(self.logspipe, 64 * 1024).decode("utf-8")
+        """Returns the qtile log output captured so far."""
+        with self._log_lock:
+            return self._log_buffer.decode("utf-8", "replace")
+
+    def _dump_logs(self, header):
+        """Print qtile's captured log output to stderr, if there is any.
+
+        pytest captures stderr per-test and shows it when a test fails, so this
+        makes qtile's own logs visible when, for example, it failed to start.
+        """
+        logs = self.get_log_buffer()
+        if logs:
+            print(f"{header}\n{logs}", file=sys.stderr)
 
     def start(self, config_class, no_spawn=False, state=None):
         multiprocessing.set_start_method("fork", force=True)
+        # In case start() is called more than once on the same manager, tear
+        # down any previous log reader/pipe first.
+        self._stop_log_reader()
         readlogs, writelogs = os.pipe()
         rpipe, wpipe = multiprocessing.Pipe()
 
         def run_qtile():
             try:
                 rpipe.close()
+                os.close(readlogs)
                 os.environ.pop("DISPLAY", None)
                 os.environ.pop("WAYLAND_DISPLAY", None)
                 init_log(self.log_level)
-                # Initialise fontconfig before starting qtile to prevent races
-                pangocffi.init_fontconfig()
-                kore = self.backend.create()
-                os.environ.update(self.backend.env)
-                from libqtile.core.lifecycle import lifecycle
-
-                os.close(readlogs)
+                # Route qtile's logs into the pipe before doing any startup work
+                # (creating the backend, building the config, etc.) so that if
+                # qtile dies during startup the parent can still surface whatever
+                # it logged. Previously this was set up after backend.create(),
+                # so the most common failure -- not being able to connect to the
+                # display -- produced no captured logs at all.
                 formatter = logging.Formatter("%(levelname)s - %(message)s")
                 handler = logging.StreamHandler(os.fdopen(writelogs, "w"))
                 handler.setFormatter(formatter)
                 logger.addHandler(handler)
+
+                # Initialise fontconfig before starting qtile to prevent races
+                pangocffi.init_fontconfig()
+                # We've just fork()ed from the pytest process. If that process
+                # rendered any text (lots of the unit tests do), Pango spun up a
+                # "[pango] fontcon" helper thread to load fonts, and fork() did
+                # not copy it. Loading an as-yet-uncached font here would then
+                # block forever in g_cond_wait waiting on that missing thread --
+                # qtile would hang right after the compositor starts. Drop the
+                # inherited font map so this process builds its own.
+                pangocffi.reset_font_map()
+                kore = self.backend.create()
+                os.environ.update(self.backend.env)
+                from libqtile.core.lifecycle import lifecycle
 
                 Qtile(
                     kore,
@@ -230,7 +312,8 @@ class TestManager:
         self.proc.start()
         wpipe.close()
         os.close(writelogs)
-        self.logspipe = readlogs
+        # Drain qtile's logs continuously so the pipe can't fill and wedge it.
+        self._start_log_reader(readlogs)
 
         # First, wait for socket to appear
         try:
@@ -240,6 +323,10 @@ class TestManager:
                 self.c = command.client.InteractiveCommandClient(ipc_command)
                 self.backend.configure(self)
                 return
+            # qtile didn't come up: surface whatever it logged before dying so
+            # the failure is debuggable in CI rather than just "Error launching
+            # qtile".
+            self._dump_logs("qtile failed to start; captured log output:")
             if rpipe.poll(0.1):
                 error = rpipe.recv()
                 raise AssertionError(f"Error launching qtile, traceback:\n{error}")
@@ -286,7 +373,12 @@ class TestManager:
                     pass
 
             if self.proc.exitcode:
+                # qtile has exited, so its end of the log pipe is closed; let the
+                # reader thread drain the last of it before we dump.
+                if self._log_reader is not None:
+                    self._log_reader.join(timeout=1)
                 print(f"qtile exited with exitcode: {self.proc.exitcode:d}", file=sys.stderr)
+                self._dump_logs("qtile log output before exit:")
 
             self.proc = None
 

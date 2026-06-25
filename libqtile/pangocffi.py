@@ -11,6 +11,20 @@ def init_fontconfig():
     fontconfig.FcInit()
 
 
+def reset_font_map():
+    """Discard the process-global default Pango/cairo font map.
+
+    A fresh font map is built lazily the next time a layout is created. This is
+    meant to be called in a freshly forked process: Pango loads fonts via a
+    helper thread (named "[pango] fontcon"), and fork() does not copy that
+    thread into the child. A child that kept the inherited font map would block
+    forever (g_cond_wait) the first time it had to load a not-yet-cached font,
+    waiting on a helper thread that no longer exists. Resetting the font map
+    gives the child its own, working helper thread.
+    """
+    pangocairo.pango_cairo_font_map_set_default(ffi.NULL)
+
+
 def create_layout(cairo_t):
     """Create a PangoLayout from a cairo context."""
     return PangoLayout(cairo_t._pointer)

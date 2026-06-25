@@ -14,6 +14,13 @@ import pytest
 
 from libqtile import images
 
+# These tests decode images in-process (libqtile.images -> cairocffi.pixbuf ->
+# glycin). glycin leaves fork-unsafe state behind (worker threads, a D-Bus
+# connection, a loader subprocess), so any qtile fork()ed afterwards would
+# deadlock loading an image. They are reordered to run after every qtile-
+# launching test. See conftest.pytest_collection_modifyitems.
+pytestmark = pytest.mark.decodes_image
+
 TEST_DIR = path.dirname(os.path.abspath(__file__))
 DATA_DIR = path.join(TEST_DIR, "data")
 PNGS = glob(path.join(DATA_DIR, "*", "*.png"))

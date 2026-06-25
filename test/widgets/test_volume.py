@@ -5,6 +5,13 @@ from libqtile import bar, images
 from libqtile.widget import Volume
 from test.widgets.conftest import TEST_DIR, FakeBar
 
+# Setting up the volume widget's images decodes them in-process (libqtile.images
+# -> cairocffi.pixbuf -> glycin), which leaves fork-unsafe glycin state behind,
+# so any qtile fork()ed afterwards would deadlock loading an image. These tests
+# are reordered to run after every qtile-launching test. See
+# conftest.pytest_collection_modifyitems.
+pytestmark = pytest.mark.decodes_image
+
 
 def test_images_fail():
     vol = Volume(theme_path=TEST_DIR)

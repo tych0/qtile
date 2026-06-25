@@ -495,7 +495,10 @@ def test_bar_hide_show_with_margin(manager_nospawn):
     ],
 )
 def test_bar_hide_show_single_screen(manager_nospawn, position, dimensions):
-    conf = GeomConf
+    # Subclass so we don't mutate the shared GeomConf class; other tests (e.g.
+    # test_geometry) rely on its original layouts and would otherwise see this
+    # borderless Max layout, depending on test execution order.
+    conf = type("GeomConfMax", (GeomConf,), {})
     conf.layouts = [libqtile.layout.Max()]
     conf.screens = [
         libqtile.config.Screen(
@@ -542,7 +545,10 @@ def test_bar_hide_show_single_screen(manager_nospawn, position, dimensions):
     ],
 )
 def test_bar_hide_show_dual_screen(manager_nospawn, position, dimensions):
-    conf = GeomConf
+    # Subclass so we don't mutate the shared GeomConf class; other tests (e.g.
+    # test_geometry) rely on its original layouts and would otherwise see this
+    # borderless Max layout, depending on test execution order.
+    conf = type("GeomConfMax", (GeomConf,), {})
     conf.layouts = [libqtile.layout.Max()]
     conf.screens = [
         libqtile.config.Screen(

@@ -8,6 +8,12 @@ from libqtile import images
 from libqtile.backend.wayland.drawer import Drawer
 from test.test_images import SVGS, png_img_24, rgba_pixel_data  # noqa: F401
 
+# These tests decode images in-process (libqtile.images -> cairocffi.pixbuf ->
+# glycin). glycin leaves fork-unsafe state behind, so any qtile fork()ed
+# afterwards would deadlock loading an image. They are reordered to run after
+# every qtile-launching test. See conftest.pytest_collection_modifyitems.
+pytestmark = pytest.mark.decodes_image
+
 
 class FakeDrawer(Drawer):
     def __init__(self, image_surface, output_scale, monkeypatch):

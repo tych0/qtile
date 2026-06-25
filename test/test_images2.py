@@ -46,7 +46,14 @@ def should_skip():
     return actual_version < min_version
 
 
-pytestmark = pytest.mark.skipif(should_skip(), reason="recent version of imagemagick not found")
+# decodes_image: these tests decode images in-process (libqtile.images ->
+# cairocffi.pixbuf -> glycin), which leaves fork-unsafe glycin state behind, so
+# they are reordered to run after every qtile-launching test. See
+# conftest.pytest_collection_modifyitems.
+pytestmark = [
+    pytest.mark.skipif(should_skip(), reason="recent version of imagemagick not found"),
+    pytest.mark.decodes_image,
+]
 
 TEST_DIR = path.dirname(path.abspath(__file__))
 DATA_DIR = path.join(TEST_DIR, "data")

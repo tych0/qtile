@@ -15,6 +15,26 @@ def pytest_addoption(parser):
     )
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "decodes_image: test decodes an image in-process via libqtile.images "
+        "(cairocffi.pixbuf -> glycin). glycin spins up worker threads, a D-Bus "
+        "connection and a loader subprocess that fork() cannot safely carry into "
+        "a child, so any qtile launched (fork()ed) afterwards would deadlock while "
+        "loading an image. These tests are reordered to run after every test that "
+        "launches a qtile (see pytest_collection_modifyitems).",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    # Run the image-decoding tests last. They leave glycin's fork-unsafe state
+    # (threads/D-Bus/loader subprocess) in this process, so every test that
+    # fork()s a qtile must run first, while the process is still glycin-clean.
+    # The sort is stable, so the relative order within each group is preserved.
+    items.sort(key=lambda item: item.get_closest_marker("decodes_image") is not None)
+
+
 def pytest_cmdline_main(config):
     if not config.option.backend:
         config.option.backend = ["x11"]
@@ -33,9 +53,9 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("backend_name", backends)
 
 
-@pytest.fixture(scope="session", params=[1])
+@pytest.fixture(scope="session")
 def outputs(request):
-    return request.param
+    return getattr(request, "param", 1)
 
 
 dualmonitor = pytest.mark.parametrize("outputs", [2], indirect=True)
@@ -91,14 +111,6 @@ def manager(request, manager_nospawn):
     config = getattr(request, "param", BareConfig)
 
     manager_nospawn.start(config)
-    yield manager_nospawn
-
-
-@pytest.fixture(scope="function")
-def manager_withlogs(request, manager_nospawn):
-    config = getattr(request, "param", BareConfig)
-
-    manager_nospawn.start(config, want_logs=True)
     yield manager_nospawn
 
 
