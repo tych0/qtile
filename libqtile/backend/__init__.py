@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 from typing import TYPE_CHECKING, Any
 
 from libqtile.utils import QtileError
@@ -14,6 +15,24 @@ CORES = {
     "wayland": (),
     "x11": ("xcffib",),
 }
+
+
+def detect_backend() -> str:
+    """Guess which backend to use from the environment.
+
+    Used when no backend is given explicitly. The session type set by logind /
+    the display manager takes precedence, falling back to the presence of a
+    Wayland or X11 display (e.g. a bare TTY or a nested session), and finally to
+    x11.
+    """
+    session_type = os.environ.get("XDG_SESSION_TYPE")
+    if session_type in CORES:
+        return session_type
+    if "WAYLAND_DISPLAY" in os.environ:
+        return "wayland"
+    if "DISPLAY" in os.environ:
+        return "x11"
+    return "x11"
 
 
 def has_deps(backend: str) -> list[str]:

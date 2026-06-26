@@ -41,6 +41,9 @@ def get_default_config():
 
 
 def make_qtile(options) -> Qtile | None:
+    if options.backend is None:
+        options.backend = libqtile.backend.detect_backend()
+        logger.warning("No backend specified, using detected backend '%s'", options.backend)
     qtile.core.name = options.backend
     if missing_deps := libqtile.backend.has_deps(options.backend):
         print(f"Backend '{options.backend}' missing required Python dependencies:")
@@ -148,9 +151,11 @@ def add_subcommand(subparsers, parents):
     parser.add_argument(
         "-b",
         "--backend",
-        default="x11",
+        default=None,
         dest="backend",
         choices=libqtile.backend.CORES.keys(),
-        help="Use specified backend.",
+        help="Use specified backend. If unset, the backend is detected from the "
+        "environment (XDG_SESSION_TYPE, then WAYLAND_DISPLAY/DISPLAY), "
+        "defaulting to x11.",
     )
     parser.set_defaults(func=start)
