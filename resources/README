@@ -1,6 +1,32 @@
 qtile.desktop: A desktop file for qtile telling session managers about qtile
-    and how to run it. This file should be installed to /usr/share/xsessions
-
-qtile-wayland.desktop: A desktop file to start qtile in wayland mode.
+    and how to run it. Install it to /usr/share/xsessions (to offer an X11
+    session) and/or /usr/share/wayland-sessions (to offer a Wayland session).
+    qtile detects the backend from the session it is started in, so the same
+    file works for both. Its Exec hands the variables the display manager set
+    for the session (XDG_SESSION_TYPE, XDG_CURRENT_DESKTOP, ...) to the systemd
+    user manager so qtile.service and the rest of graphical-session.target
+    inherit them, then starts qtile.service. The variables are listed
+    explicitly because bare "systemctl import-environment" is deprecated; extend
+    the list if your setup needs more.
 
 99-qtile.rules: udev rules for hardware that qtile can manage
+
+qtile-session.target, qtile.service: systemd user units that start qtile as a
+    user service, which activates graphical-session.target so xdg-desktop-portal
+    and similar services (screen sharing, file pickers, ...) work correctly.
+    Install both to ~/.config/systemd/user/. The backend is not named
+    explicitly -- "qtile start" picks it from XDG_SESSION_TYPE (which the
+    display manager sets per session), so the same unit serves both X11 and
+    Wayland. Adjust ExecStart in qtile.service if your qtile binary is not in
+    ~/.local/bin.
+
+    Anything static (locale, toolkit settings, ...) is better placed in
+    ~/.config/environment.d/, which the user manager reads on its own.
+    If you start qtile from a TTY or a launcher that does not set
+    XDG_SESSION_TYPE, set it (or anything else your apps need) in
+    ~/.config/environment.d/, or pass -b to "qtile start" explicitly. If more
+    than one xdg-desktop-portal backend is installed, pin the preferred one in
+    ~/.config/xdg-desktop-portal/qtile-portals.conf, e.g.:
+
+        [preferred]
+        default=wlr;gtk

@@ -41,6 +41,13 @@ let
       postPatch = "";
 
       patches = [ ];
+
+      # qtile-wayland.desktop has been removed; the same qtile.desktop now works
+      # for both backends, so install it to both session directories
+      postInstall = ''
+        install resources/qtile.desktop -Dt $out/share/xsessions
+        install resources/qtile.desktop -Dt $out/share/wayland-sessions
+      '';
     };
 in
 (pkgs.python3Packages.qtile.overrideAttrs qtile-override-func).override {
