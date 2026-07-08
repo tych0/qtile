@@ -108,6 +108,9 @@ def test_urgent_hook_fire(xmanager_nospawn):
     )
     conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
     conn.xsync()
+    # our xsync() guarantees the ClientMessage is queued at qtile; qtile's
+    # sync() guarantees it has been handled (and thus the hook has fired)
+    xmanager_nospawn.c.sync()
 
     xmanager_nospawn.terminate()
     assert xmanager_nospawn.hook_fired.value == 1
@@ -125,6 +128,7 @@ def test_urgent_hook_fire(xmanager_nospawn):
     )
     conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
     conn.xsync()
+    xmanager_nospawn.c.sync()
     xmanager_nospawn.terminate()
 
     assert xmanager_nospawn.hook_fired.value == 2
@@ -142,6 +146,7 @@ def test_urgent_hook_fire(xmanager_nospawn):
     )
     conn.default_screen.root.send_event(ev, mask=xcffib.xproto.EventMask.SubstructureRedirect)
     conn.xsync()
+    xmanager_nospawn.c.sync()
 
     xmanager_nospawn.terminate()
 
