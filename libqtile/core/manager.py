@@ -1480,9 +1480,18 @@ class Qtile(CommandObject):
     @expose_command()
     def sync(self) -> None:
         """
-        Sync the backend's event queue. Should only be used for development.
+        Process all pending backend events before returning.
+
+        This acts as a synchronization barrier: as far as the protocol
+        allows, all events resulting from qtile's own requests to the display
+        server have been handled when this command returns. It cannot wait
+        for other clients' asynchronous behavior (e.g. a window actually
+        closing after being asked to), so callers still need to poll for
+        state changes that depend on another client.
+
+        Should only be needed for development and testing.
         """
-        self.core.flush()
+        self.core.synchronize()
 
     @expose_command()
     def to_screen(self, n: int) -> None:

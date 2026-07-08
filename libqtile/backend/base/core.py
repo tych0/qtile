@@ -106,6 +106,27 @@ class Core(CommandObject, metaclass=ABCMeta):
     def flush(self) -> None:
         """If needed, flush the backend's event queue."""
 
+    def synchronize(self) -> None:
+        """Block until the backend has settled.
+
+        This is a stronger barrier than flush(): as far as possible, it should
+        only return once the backend has processed every event that has been
+        generated as a side effect of anything qtile has done so far. For
+        example, on X11 changing the input focus generates FocusIn/FocusOut
+        events that qtile only sees (and updates its state from) some time
+        after the SetInputFocus request was issued; synchronize() must not
+        return until those events have been handled.
+
+        This cannot (and does not try to) wait for other clients: a window
+        that has been asked to close via WM_DELETE_WINDOW or xdg_toplevel.close
+        exits on its own schedule, so callers still need to poll for
+        client-driven state changes.
+
+        This is primarily useful for making the test suite deterministic; see
+        IPCCommandServer for how it is used there.
+        """
+        self.flush()
+
     def simulate_keypress(self, modifiers: list[str], key: str) -> None:
         """Simulate a keypress with given modifiers"""
 

@@ -727,6 +727,27 @@ class Core(base.Core):
     def flush(self) -> None:
         self._poll()
 
+    def synchronize(self) -> None:
+        """Process everything pending on the wayland event loop.
+
+        Unlike x11, qtile *is* the display server here, so there is no
+        external server to perform a round trip with: a command's effects on
+        our own state have already happened by the time it returns. What may
+        still be outstanding is work scheduled on the wayland event loop
+        itself: readable client (and XWayland) fds, and idle callbacks, whose
+        handlers may in turn schedule more work. wl_event_loop_dispatch()
+        gives us no signal about whether it dispatched anything, so we cannot
+        iterate to a fixpoint like x11 does; instead, dispatch a handful of
+        times to drain cascaded idle callbacks.
+
+        There is no protocol-level way to wait for another client to react to
+        events we have sent it (short of an xdg ping/pong round trip per
+        client, which wlroots does not expose to us), so tests must still
+        poll for state changes that require a client to respond.
+        """
+        for _ in range(8):
+            self._poll()
+
     def graceful_shutdown(self) -> None:
         """Try to close windows gracefully before exiting"""
         assert self.qtile is not None

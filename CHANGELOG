@@ -1,5 +1,11 @@
 Qtile x.xx.x, released xxxx-xx-xx:
     * features
+      - The `sync` command is now a real synchronization barrier: it only
+        returns once qtile has processed all events resulting from its own
+        requests to the display server (x11: repeated XSync+dispatch until
+        quiescent; wayland: drain the event loop). Setting
+        QTILE_SYNC_COMMANDS=1 makes every IPC command such a barrier, which
+        the test suite uses to avoid racy assertions.
     * bugfixes
 
 Qtile 0.36.0, released 2026-05-22:

@@ -313,15 +313,20 @@ class Core(base.Core):
             if not ret:
                 break
 
-    def _xpoll(self) -> None:
-        """Poll the connection and dispatch incoming events"""
+    def _xpoll(self) -> int:
+        """Poll the connection and dispatch incoming events
+
+        Returns the number of events that were dispatched.
+        """
         assert self.qtile is not None
 
+        handled = 0
         while True:
             try:
                 event = self.conn.conn.poll_for_event()
                 if not event:
                     break
+                handled += 1
 
                 if event.__class__ in _IGNORED_EVENTS:
                     continue
@@ -369,13 +374,14 @@ class Core(base.Core):
                     logger.warning("Shutting down due to disconnection from X server")
                     self.remove_listener()
                     self.qtile.stop()
-                    return
+                    return handled
                 logger.exception("Got an exception in poll loop")
         # Handle any outstanding motion notify events
         if self._motion_notify:
             self.handle_event(self._motion_notify)
             self._motion_notify = None
         self.flush()
+        return handled
 
     def _get_target_chain(self, event) -> list[Callable]:
         """Returns a chain of targets that can handle this event
@@ -926,6 +932,36 @@ class Core(base.Core):
 
     def flush(self):
         self.conn.flush()
+
+    def synchronize(self) -> None:
+        """Block until we are in sync with the X server.
+
+        Repeatedly perform a round trip to the X server (which guarantees
+        that the server has processed everything we have sent so far, and
+        that any events generated while doing so have been queued on our
+        connection) and then dispatch whatever arrived. Handling those events
+        may issue new requests, so iterate until a round trip delivers no new
+        events.
+
+        Note that this cannot wait for the asynchronous behavior of *other*
+        clients (e.g. a window actually closing in response to a
+        WM_DELETE_WINDOW message); callers need to poll for state changes
+        that depend on another client doing something.
+        """
+        if getattr(self, "qtile", None) is None or getattr(self, "fd", None) is None:
+            # We are not (or no longer) hooked up to the event loop, so there
+            # is nothing to dispatch events to.
+            return
+
+        for _ in range(100):
+            try:
+                self.conn.flush()
+                self.conn.xsync()
+            except xcffib.ConnectionException:
+                return
+            if not self._xpoll():
+                return
+        logger.warning("X11 connection did not settle after 100 sync iterations")
 
     def get_mouse_position(self) -> tuple[int, int]:
         """

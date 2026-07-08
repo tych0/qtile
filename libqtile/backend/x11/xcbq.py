@@ -667,7 +667,8 @@ class Connection:
         # The idea here is that pushing an innocuous request through the queue
         # and waiting for a response "syncs" the connection, since requests are
         # serviced in order.
-        self.conn.core.GetInputFocus().reply()
+        if self._connected:
+            self.conn.core.GetInputFocus().reply()
 
     def get_setup(self):
         return self.conn.get_setup()
