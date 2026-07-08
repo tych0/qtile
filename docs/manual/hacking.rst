@@ -94,6 +94,34 @@ In practice, the development cycle looks something like this:
 Tests and pre-commit hooks will be run by our CI on every pull request
 as well so you can see whether or not your contribution passes.
 
+The test suite can also be run in parallel (e.g. ``pytest -n auto`` with
+pytest-xdist installed); each worker allocates its own X displays under a
+global lock, so workers do not interfere with each other.
+
+Synchronization in tests
+------------------------
+
+Tests talk to the qtile instance under test via the IPC client
+(``manager.c.foo()``). Commands execute inside qtile's event loop, but many of
+their effects go through the display server and only land later, when qtile
+processes the resulting events (e.g. changing focus generates FocusIn/FocusOut
+events, and fake input generates key/button events). Asserting qtile's state
+immediately after a command is therefore racy in general.
+
+To avoid this, the test harness starts qtile with ``QTILE_SYNC_COMMANDS=1``
+in its environment, which makes the IPC server run a synchronization barrier
+(``Core.synchronize()``) before and after every command: on X11, it round
+trips to the X server and dispatches the delivered events, repeating until no
+more events arrive; on Wayland, it drains the compositor's event loop. As a
+result, when a client call returns, qtile has fully processed everything that
+its own requests caused, and a subsequent call observes settled state.
+
+The barrier cannot wait for *other* clients, though: a window that was asked
+to close (``window.kill()``), or a client that is expected to remap or retitle
+its window, does that on its own schedule, and no protocol mechanism can bound
+it. Assertions that depend on another process reacting must still poll, e.g.
+with the ``Retry`` helper or ``assert_window_died`` in ``test/helpers.py``.
+
 Coding style
 ============
 

@@ -2,6 +2,7 @@
 The interface to execute commands on the command graph
 """
 
+import os
 import traceback
 import types
 import typing
@@ -392,12 +393,41 @@ class IPCCommandServer:
         and from the IPCCommandInterface.
         """
         self.qtile = qtile
+        # When enabled, run a full backend synchronization barrier before and
+        # after every command, so that clients observe a settled qtile: by
+        # the time a command's reply is sent, all events the display server
+        # generated as a result of that command (focus changes, fake input,
+        # configures, ...) have been processed. The test suite enables this
+        # to make client calls deterministic; see Core.synchronize(). It is
+        # an environment variable (rather than, say, a config option) so that
+        # it survives in-place restarts via exec().
+        self.sync_commands = os.environ.get("QTILE_SYNC_COMMANDS", "") == "1"
+
+    def _synchronize(self) -> None:
+        if not self.sync_commands:
+            return
+        try:
+            self.qtile.core.synchronize()
+        except Exception:
+            # Never let a sync failure (e.g. a connection that died because
+            # the command we just ran was shutdown()) break the reply.
+            logger.exception("error while synchronizing backend")
 
     def call(
         self,
         data: tuple[list[SelectorType], str, tuple, dict, bool],
     ) -> tuple[int, Any]:
         """Receive and parse the given data"""
+        self._synchronize()
+        try:
+            return self._call(data)
+        finally:
+            self._synchronize()
+
+    def _call(
+        self,
+        data: tuple[list[SelectorType], str, tuple, dict, bool],
+    ) -> tuple[int, Any]:
         selectors, name, args, kwargs, lifted = data
         try:
             obj = self.qtile.select(selectors)

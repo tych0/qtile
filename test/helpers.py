@@ -38,6 +38,11 @@ LOG_PIPE_BUFFER_SIZE = 128 * 1024
 max_sleep = 5.0
 sleep_time = 0.1
 
+# Everything is slower when several pytest-xdist workers share the machine,
+# so give condition polling more headroom. This only slows down failures.
+if os.environ.get("PYTEST_XDIST_WORKER"):
+    max_sleep *= 4
+
 
 class Retry:
     def __init__(
@@ -224,6 +229,11 @@ class TestManager:
                 os.close(readlogs)
                 os.environ.pop("DISPLAY", None)
                 os.environ.pop("WAYLAND_DISPLAY", None)
+                # Make every IPC command a synchronization barrier, so that
+                # when a client call returns, qtile has processed all of the
+                # events that the command generated (see IPCCommandServer).
+                # This is an environment variable so it survives restart().
+                os.environ["QTILE_SYNC_COMMANDS"] = "1"
                 init_log(self.log_level)
 
                 formatter = logging.Formatter("%(levelname)s - %(message)s")
