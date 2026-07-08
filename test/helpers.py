@@ -344,9 +344,10 @@ class TestManager:
 
         @Retry(ignore_exceptions=(RuntimeError,))
         def success():
-            while failed is None or not failed():
-                if len(client.windows()) > start:
-                    return True
+            if len(client.windows()) > start:
+                return True
+            if failed is not None and failed():
+                raise RuntimeError("client process died without creating a window")
             raise RuntimeError("window has not appeared yet")
 
         return success()
