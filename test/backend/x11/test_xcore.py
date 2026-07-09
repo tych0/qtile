@@ -1,11 +1,16 @@
 import pytest
+import xcffib
 
 from libqtile.backend import get_core
 from libqtile.backend.x11 import core
+from test.helpers import Retry
 from test.test_manager import ManagerConfig
 
 
+@Retry(ignore_exceptions=(xcffib.ConnectionException,))
 def test_get_core_x11(display):
+    # retried; connecting can transiently fail while several test sessions
+    # share the machine
     get_core("x11", display).finalize()
 
 

@@ -33,6 +33,16 @@ def can_connect_x11(disp=":0", *, ok=None):
     return True
 
 
+@Retry(ignore_exceptions=(xcffib.ConnectionException,))
+def connect_x11(display):
+    """Open a test Connection to the given display.
+
+    Retries: an X server that is still starting up, or busy while several
+    test sessions share the machine, can transiently refuse connections.
+    """
+    return Connection(display)
+
+
 def socket_path(display: int) -> str:
     return f"/tmp/.X11-unix/X{display}"
 
@@ -327,7 +337,7 @@ def xmanager_nospawn(request, xephyr):
 
 @pytest.fixture(scope="function")
 def conn(xmanager):
-    conn = Connection(xmanager.display)
+    conn = connect_x11(xmanager.display)
     yield conn
     conn.finalize()
 
@@ -343,7 +353,7 @@ class XBackend(Backend):
 
     def fake_motion(self, x, y):
         """Move pointer to the specified coordinates"""
-        conn = Connection(self.env["DISPLAY"])
+        conn = connect_x11(self.env["DISPLAY"])
         root = conn.default_screen.root.wid
         xtest = conn.conn(xcffib.xtest.key)
         xtest.FakeInput(6, 0, xcffib.xproto.Time.CurrentTime, root, x, y, 0)
@@ -353,7 +363,7 @@ class XBackend(Backend):
 
     def fake_click(self, x, y):
         """Click at the specified coordinates"""
-        conn = Connection(self.env["DISPLAY"])
+        conn = connect_x11(self.env["DISPLAY"])
         root = conn.default_screen.root.wid
         xtest = conn.conn(xcffib.xtest.key)
         xtest.FakeInput(6, 0, xcffib.xproto.Time.CurrentTime, root, x, y, 0)
@@ -365,7 +375,7 @@ class XBackend(Backend):
 
     def get_all_windows(self):
         """Get a list of all windows in ascending order of Z position"""
-        conn = Connection(self.env["DISPLAY"])
+        conn = connect_x11(self.env["DISPLAY"])
         root = conn.default_screen.root.wid
         q = conn.conn.core.QueryTree(root).reply()
         wins = list(q.children)

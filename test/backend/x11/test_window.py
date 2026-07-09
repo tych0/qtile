@@ -11,7 +11,7 @@ import xcffib.xtest
 import libqtile.config
 from libqtile import hook, layout, utils
 from libqtile.backend.x11 import window, xcbq
-from libqtile.backend.x11.xcbq import Connection
+from test.backend.x11.conftest import connect_x11
 from test.conftest import dualmonitor
 from test.helpers import (
     HEIGHT,
@@ -87,7 +87,7 @@ class FuncConfig(BareConfig):
 @dualmonitor
 def test_urgent_hook_fire(xmanager_nospawn):
     xmanager_nospawn.display = xmanager_nospawn.backend.env["DISPLAY"]
-    conn = Connection(xmanager_nospawn.display)
+    conn = connect_x11(xmanager_nospawn.display)
 
     xmanager_nospawn.hook_fired = Value("i", 0)
 
@@ -177,7 +177,7 @@ def test_default_float_hints(xmanager, conn):
         w.kill_client()
 
     w = None
-    conn = xcbq.Connection(xmanager.display)
+    conn = connect_x11(xmanager.display)
 
     def size_hints():
         nonlocal w
@@ -859,7 +859,7 @@ def test_net_wm_state_focused(xmanager, conn):
 
 @manager_config
 def test_floats_kept_above_cleared_on_toggle(xmanager):
-    conn = xcbq.Connection(xmanager.display)
+    conn = connect_x11(xmanager.display)
 
     def has_state_above(wid):
         r = conn.conn.core.GetProperty(
@@ -880,7 +880,7 @@ def test_floats_kept_above_cleared_on_toggle(xmanager):
 
 
 def test_multiple_wm_types(xmanager):
-    conn = xcbq.Connection(xmanager.display)
+    conn = connect_x11(xmanager.display)
     w = conn.create_window(50, 50, 50, 50)
     normal = conn.atoms["_NET_WM_WINDOW_TYPE_NORMAL"]
     kde_override = conn.atoms["_KDE_NET_WM_WINDOW_TYPE_OVERRIDE"]

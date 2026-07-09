@@ -39,6 +39,12 @@ class PollingWidget(BackgroundPoll):
         return f"Poll count: {self.poll_count}"
 
 
+@Retry(ignore_exceptions=(AssertionError,))
+def assert_widget_text(widget, text):
+    # polling runs in a background thread, so wait for its result to land
+    assert widget.info()["text"] == text
+
+
 def test_multiple_timers(minimal_conf_noscreen, manager_nospawn):
     config = minimal_conf_noscreen
     config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([TimerWidget(10)], 10))]
@@ -142,11 +148,11 @@ def test_threadpolltext_force_update(minimal_conf_noscreen, manager_nospawn):
     widget = manager_nospawn.c.widget["pollingwidget"]
 
     # Widget is polled immediately when configured
-    assert widget.info()["text"] == "Poll count: 1"
+    assert_widget_text(widget, "Poll count: 1")
 
     # Default update_interval is 600 seconds so the widget won't poll during test unless forced
     widget.force_update()
-    assert widget.info()["text"] == "Poll count: 2"
+    assert_widget_text(widget, "Poll count: 2")
 
 
 def test_threadpolltext_update_interval_none(minimal_conf_noscreen, manager_nospawn):
@@ -159,7 +165,7 @@ def test_threadpolltext_update_interval_none(minimal_conf_noscreen, manager_nosp
     widget = manager_nospawn.c.widget["pollingwidget"]
 
     # Widget is polled immediately when configured
-    assert widget.info()["text"] == "Poll count: 1"
+    assert_widget_text(widget, "Poll count: 1")
 
 
 class ScrollingTextConfig(BareConfig):
