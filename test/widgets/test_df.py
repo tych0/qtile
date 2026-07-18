@@ -1,36 +1,22 @@
-import sys
-from importlib import reload
-from types import ModuleType
-
 import pytest
 
 from libqtile.widget import df
 from test.widgets.conftest import FakeBar
 
 
-class FakeOS(ModuleType):
-    class statvfs:  # noqa: N801
-        def __init__(self, *args, **kwargs):
-            pass
+class FakeStatvfs:
+    """A fake return value for os.statvfs()"""
 
-        @property
-        def f_frsize(self):
-            return 4096
+    def __init__(self, *args, **kwargs):
+        pass
 
-        @property
-        def f_blocks(self):
-            return 60000000
-
-        @property
-        def f_bfree(self):
-            return 15000000
-
-        @property
-        def f_bavail(self):
-            return 10000000
+    f_frsize = 4096
+    f_blocks = 60000000
+    f_bfree = 15000000
+    f_bavail = 10000000
 
 
-# Patches os.stavfs gives these values for df widget:
+# Patching os.statvfs gives these values for df widget:
 #  unit: G
 #  size = 228
 #  free = 57
@@ -38,8 +24,12 @@ class FakeOS(ModuleType):
 #  ratio (user_free / size) = 83.3333%
 @pytest.fixture()
 def patched_df(monkeypatch):
-    monkeypatch.setitem(sys.modules, "os", FakeOS("os"))
-    reload(df)
+    # Only patch the one function the widget uses. Replacing the whole os
+    # module in sys.modules (as this fixture used to do) races against other
+    # threads in the test process (e.g. pytest-xdist's execnet IO thread)
+    # importing things while the fake, mostly-empty module is visible, which
+    # occasionally deadlocked the worker.
+    monkeypatch.setattr(df.os, "statvfs", FakeStatvfs)
 
 
 @pytest.mark.usefixtures("patched_df")
