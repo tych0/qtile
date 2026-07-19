@@ -106,12 +106,16 @@ def test_systray_icons(manager_nospawn, minimal_conf_noscreen, backend_name):
     # We now have two icons so widget should expand to leave space in bar for icons
     assert manager_nospawn.c.widget["systray"].info()["widget"]["length"] > 0
 
-    # Check positioning of icon
-    x = manager_nospawn.c.widget["systray"].eval("self.tray_icons[0].x")
-    y = manager_nospawn.c.widget["systray"].eval("self.tray_icons[0].y")
+    # Icons are positioned when the widget draws after the clients dock,
+    # which happens on the clients' schedule, so poll for it. Positions are
+    # relative to the bar.
+    @Retry(ignore_exceptions=(AssertionError))
+    def wait_for_icon_position():
+        x = manager_nospawn.c.widget["systray"].eval("self.tray_icons[0].x")
+        y = manager_nospawn.c.widget["systray"].eval("self.tray_icons[0].y")
+        assert (int(x), int(y)) == (3, 10)
 
-    # Positions are relative to bar
-    assert (int(x), int(y)) == (3, 10)
+    wait_for_icon_position()
 
     # Icons should be in alphabetical order
     order = manager_nospawn.c.widget["systray"].eval("[i.name for i in self.tray_icons]")
