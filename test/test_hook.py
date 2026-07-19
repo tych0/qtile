@@ -674,6 +674,14 @@ def test_screen_change(manager_nospawn):
         assert manager_nospawn.screen_change_calls.value == num
 
     def inc_screen_change_calls(event):
+        # On x11 the server can send genuine ScreenChangeNotify events at any
+        # point (e.g. Xephyr sends them in response to qtile's own RandR
+        # probing at startup), and nothing synchronizes them with this test,
+        # so counting them would be racy. Only count the synthetic event
+        # injected below, which is recognizable by its impossible root of 0;
+        # the wayland backend fires this hook with event=None.
+        if event is not None and event.root != 0:
+            return
         manager_nospawn.screen_change_calls.value += 1
 
     manager_nospawn.screen_change_calls = Value("i", 0)
@@ -681,21 +689,23 @@ def test_screen_change(manager_nospawn):
 
     manager_nospawn.start(BareConfig)
 
-    # qtile no longer fires screen_change unconditionally at startup, but
-    # servers send ScreenChangeNotify on their own schedule (Xephyr notifies
-    # us about the current configuration in response to qtile's own RandR
-    # probing at boot), so we can only count relative to a settled baseline.
-    manager_nospawn.c.sync()
-    baseline = manager_nospawn.screen_change_calls.value
-
-    # a ScreenChangeNotify fires the hook
-    manager_nospawn.c.eval(
-        "self.core.handle_ScreenChangeNotify("
-        "__import__('xcffib').randr.ScreenChangeNotifyEvent.synthetic("
-        "rotation=1, timestamp=1000, config_timestamp=1000, root=0, request_window=0, "
-        "sizeID=0, subpixel_order=0, width=640, height=480, mwidth=170, mheight=127))"
-    )
-    assert_inc_calls(baseline + 1)
+    # a configuration change reported by the backend fires the hook
+    if manager_nospawn.backend.name == "x11":
+        manager_nospawn.c.eval(
+            "self.core.handle_ScreenChangeNotify("
+            "__import__('xcffib').randr.ScreenChangeNotifyEvent.synthetic("
+            "rotation=1, timestamp=1000, config_timestamp=1000, root=0, request_window=0, "
+            "sizeID=0, subpixel_order=0, width=640, height=480, mwidth=170, mheight=127))"
+        )
+        assert_inc_calls(1)
+    else:
+        # wlroots reports the headless output being added at boot on its own
+        # schedule, and its firings are indistinguishable from ours, so count
+        # relative to a settled baseline.
+        manager_nospawn.c.sync()
+        baseline = manager_nospawn.screen_change_calls.value
+        manager_nospawn.c.eval("self.core.handle_screen_change()")
+        assert_inc_calls(baseline + 1)
 
 
 @pytest.mark.usefixtures("hook_fixture")
