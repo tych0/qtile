@@ -5,6 +5,7 @@ import pytest
 import libqtile
 from libqtile import pangocffi
 from libqtile.backend.base import drawer
+from test import helpers
 from test.helpers import BareConfig, TestManager
 
 _MAIN_PID = os.getpid()
@@ -87,6 +88,28 @@ def reset_pango_in_forked_children(request):
     if request.node.get_closest_marker("forked") is not None and os.getpid() != _MAIN_PID:
         pangocffi.reset_font_map()
     yield
+
+
+@pytest.fixture(autouse=True)
+def fail_on_unexpected_fork():
+    """Fail any test that forks a multi-threaded test process unexpectedly.
+
+    Threads spawned in this process by C libraries (pango's font loader,
+    GLib workers, ...) can deadlock a fork()ed child, and the corresponding
+    DeprecationWarning cannot be promoted to an error (os.fork() swallows
+    it), so test/helpers.py records offending forks and we fail the test
+    here. Forks that have been made fork-safe on purpose are marked with
+    helpers.expected_fork().
+    """
+    yield
+    if helpers.fork_violations:
+        violations = "\n".join(helpers.fork_violations)
+        helpers.fork_violations.clear()
+        pytest.fail(
+            "unexpected fork() of a multi-threaded test process; if the child "
+            "is engineered to be fork-safe, mark the fork with "
+            f"test.helpers.expected_fork():\n{violations}"
+        )
 
 
 def pytest_addoption(parser):

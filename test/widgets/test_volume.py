@@ -11,7 +11,13 @@ from test.widgets.conftest import TEST_DIR, FakeBar
 # later fork()s, deadlocking pango font loading (g_cond_wait) in the child. Run
 # each test in its own subprocess so the threads die with it and the main pytest
 # process stays fork-safe.
-pytestmark = pytest.mark.forked
+pytestmark = [
+    pytest.mark.forked,
+    # the isolation fork itself can trip the "multi-threaded fork" warning
+    # once other tests have spawned C worker threads in the pytest process;
+    # it is safe by design (see the fork guard in test/helpers.py)
+    pytest.mark.filterwarnings("ignore:This process"),
+]
 
 
 def test_images_fail():

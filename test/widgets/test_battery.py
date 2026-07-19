@@ -224,6 +224,7 @@ def test_text_battery_error(monkeypatch):
 # (Only these tests are marked, not the whole module, since the rest fork a qtile
 # and must not be nested inside another fork.)
 @pytest.mark.forked
+@pytest.mark.filterwarnings("ignore:This process")
 def test_images_fail():
     """Test BatteryIcon() with a bad theme_path
 
@@ -235,6 +236,7 @@ def test_images_fail():
 
 
 @pytest.mark.forked
+@pytest.mark.filterwarnings("ignore:This process")
 def test_images_good(tmpdir, fake_bar, svg_img_as_pypath):
     """Test BatteryIcon() with a good theme_path
 
@@ -254,6 +256,7 @@ def test_images_good(tmpdir, fake_bar, svg_img_as_pypath):
 
 
 @pytest.mark.forked
+@pytest.mark.filterwarnings("ignore:This process")
 def test_images_default(fake_bar):
     """Test BatteryIcon() with the default theme_path
 

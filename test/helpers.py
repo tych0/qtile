@@ -5,6 +5,7 @@ Defining them here rather than in conftest.py avoids issues with circular import
 between test/conftest.py and test/backend/<backend>/conftest.py files.
 """
 
+import contextlib
 import faulthandler
 import functools
 import logging
@@ -17,6 +18,7 @@ import sys
 import tempfile
 import time
 import traceback
+import warnings
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
 
@@ -42,6 +44,59 @@ sleep_time = 0.1
 # so give condition polling more headroom. This only slows down failures.
 if os.environ.get("PYTEST_XDIST_WORKER"):
     max_sleep *= 4
+
+
+# Worker threads that C libraries (pango, GLib, ...) spawn in the pytest
+# process can deadlock a fork()ed child, so any fork of a multi-threaded test
+# process must be one of the sites we have deliberately made fork-safe,
+# marked with expected_fork(). CPython's corresponding DeprecationWarning
+# cannot be promoted to an error (os.fork() swallows the exception, silencing
+# the warning instead), and exceptions from at-fork hooks are ignored, so the
+# guard records violations here and a conftest autouse fixture fails the
+# offending test.
+fork_violations = []
+_expected_forks = 0
+
+
+@contextlib.contextmanager
+def expected_fork():
+    """Mark a fork of the test process as known to be fork-safe.
+
+    Also silences multiprocessing's "multi-threaded process" warning for the
+    fork, since the whole point of the marker is that we have made the child
+    safe against the inherited threads.
+    """
+    global _expected_forks
+    _expected_forks += 1
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "This process", DeprecationWarning)
+            yield
+    finally:
+        _expected_forks -= 1
+
+
+def _fork_guard():
+    if _expected_forks:
+        return
+    stack = traceback.extract_stack()
+    if any(f.filename.endswith("forkedfunc.py") for f in stack):
+        # pytest-forked's isolation forks: the child runs a single test and
+        # exits, precisely to keep thread-spawning work away from this
+        # process, so it never waits on an inherited thread
+        return
+    try:
+        native_threads = sum(1 for _ in Path("/proc/self/task").iterdir())
+    except OSError:
+        return
+    if native_threads > 1:
+        fork_violations.append(
+            f"fork() of the test process while it has {native_threads} threads, at:\n"
+            + "".join(traceback.format_stack())
+        )
+
+
+os.register_at_fork(before=_fork_guard)
 
 
 class Retry:
@@ -269,7 +324,16 @@ class TestManager:
                 wpipe.close()
 
         self.proc = multiprocessing.Process(target=run_qtile)
-        self.proc.start()
+        # This fork is engineered to be safe despite threads in the pytest
+        # process: run_qtile() resets the inherited pango state, in-process
+        # image decoding is isolated into pytest-forked subprocesses, and the
+        # remaining threads (e.g. pytest-xdist's execnet IO threads,
+        # pytest-httpbin's server) are ones qtile children have always
+        # coexisted with. A child that does deadlock is still caught:
+        # can_connect_qtile() times out and the child's logs are dumped to
+        # stderr.
+        with expected_fork():
+            self.proc.start()
         wpipe.close()
         os.close(writelogs)
         self.logspipe = readlogs

@@ -171,6 +171,13 @@ filterwarnings = [
     "error:::test",
     "ignore:::dbus_next",
 ]
-faulthandler_timeout = 360
-faulthandler_exit_on_timeout = true
+# NB: the "multi-threaded process is about to fork" DeprecationWarning cannot
+# be promoted to an error here: os.fork() deliberately swallows the exception
+# when a filter turns it into one (making the filter silence the warning
+# instead). The suite enforces it via an at-fork guard instead; see
+# test/helpers.py.
+#
+# no faulthandler_timeout: faulthandler.dump_traceback_later() starts a
+# watchdog thread, which would make every fork of the test process
+# multi-threaded; pytest-timeout already dumps stacks on hangs.
 timeout = 300 # pytest-timeout

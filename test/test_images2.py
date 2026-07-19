@@ -54,6 +54,8 @@ def should_skip():
 pytestmark = [
     pytest.mark.skipif(should_skip(), reason="recent version of imagemagick not found"),
     pytest.mark.forked,
+    # see test/test_images.py: the isolation fork itself is fork-safe
+    pytest.mark.filterwarnings("ignore:This process"),
 ]
 
 TEST_DIR = path.dirname(path.abspath(__file__))

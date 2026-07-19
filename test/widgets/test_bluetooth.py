@@ -16,7 +16,7 @@ from libqtile.bar import Bar
 from libqtile.config import Screen
 from libqtile.widget.bluetooth import BLUEZ_ADAPTER, BLUEZ_BATTERY, BLUEZ_DEVICE, Bluetooth
 from test.conftest import BareConfig
-from test.helpers import Retry
+from test.helpers import Retry, expected_fork
 
 ADAPTER_PATH = "/org/bluez/hci0"
 ADAPTER_NAME = "qtile_bluez"
@@ -210,7 +210,11 @@ def fake_dbus_daemon(monkeypatch):
                 pass
 
     p = multiprocessing.Process(target=Bluez().run)
-    p.start()
+    # This child only runs a fresh asyncio loop serving dbus and never
+    # touches the parent's pango/GLib state, so it is safe to fork even off
+    # a multi-threaded pytest process.
+    with expected_fork():
+        p.start()
 
     # Wait for the fake bluez service to claim its name on the bus
     async def bluez_name_owned():
