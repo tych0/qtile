@@ -33,6 +33,10 @@
           pytest
           isort
           pytest-asyncio
+          # no pytest-forked: pytest >= 9's vendored 'py' shim breaks it here
+          # (see nix/qtile.nix); the suite runs its forked-marked tests
+          # unforked without it
+          pytest-timeout
           anyio
         ];
 

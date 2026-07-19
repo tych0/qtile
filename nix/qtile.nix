@@ -54,6 +54,18 @@ let
           --replace-fail '%h/.local/bin/qtile' '${placeholder "out"}/bin/qtile' \
           --replace-fail '/usr/bin/systemctl' '${pkgs.systemd}/bin/systemctl'
       '';
+    }
+    // {
+      # bound hanging tests with pytest-timeout (buildPythonPackage runs its
+      # tests in the install check phase, so this must be
+      # nativeInstallCheckInputs; a nativeCheckInputs override is silently
+      # ignored). NB: pytest-forked is deliberately absent: it needs the real
+      # 'py' library, which pytest >= 9's vendored 'py' shim shadows here, so
+      # its isolation forks crash ("module 'py' has no attribute 'process'").
+      # The suite registers the 'forked' marker, so those tests degrade to
+      # running unforked, as they always have in this environment.
+      nativeInstallCheckInputs =
+        (qtile-prev.nativeInstallCheckInputs or [ ]) ++ (with pkgs.python3Packages; [ pytest-timeout ]);
     };
 in
 (pkgs.python3Packages.qtile.overrideAttrs qtile-override-func).override {
