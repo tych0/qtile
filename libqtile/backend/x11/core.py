@@ -226,12 +226,6 @@ class Core(base.Core):
         self.update_client_lists()
 
         self.conn.enable_screen_change_notifications()
-        # previous to the enable_screen_change_notifications() refactoring,
-        # we triggered a screen change notification on every boot,
-        # regardless of whether the screen had actually changed. so, we do
-        # that here, since we had tests that enforced that behavior so
-        # maybe someone depended on it.
-        hook.fire("screen_change", None)
 
         if not initial:
             # We are just reloading config

@@ -680,7 +680,22 @@ def test_screen_change(manager_nospawn):
     hook.subscribe.screen_change(inc_screen_change_calls)
 
     manager_nospawn.start(BareConfig)
-    assert_inc_calls(1)
+
+    # qtile no longer fires screen_change unconditionally at startup, but
+    # servers send ScreenChangeNotify on their own schedule (Xephyr notifies
+    # us about the current configuration in response to qtile's own RandR
+    # probing at boot), so we can only count relative to a settled baseline.
+    manager_nospawn.c.sync()
+    baseline = manager_nospawn.screen_change_calls.value
+
+    # a ScreenChangeNotify fires the hook
+    manager_nospawn.c.eval(
+        "self.core.handle_ScreenChangeNotify("
+        "__import__('xcffib').randr.ScreenChangeNotifyEvent.synthetic("
+        "rotation=1, timestamp=1000, config_timestamp=1000, root=0, request_window=0, "
+        "sizeID=0, subpixel_order=0, width=640, height=480, mwidth=170, mheight=127))"
+    )
+    assert_inc_calls(baseline + 1)
 
 
 @pytest.mark.usefixtures("hook_fixture")

@@ -1,4 +1,12 @@
 Qtile x.xx.x, released xxxx-xx-xx:
+    !!! Behavior change !!!
+      - The screen_change hook is no longer fired unconditionally at startup
+        and on config reload; it now only fires when the backend reports a
+        configuration change. Note that on x11, exactly when that happens is
+        server dependent: qtile fires the hook for every ScreenChangeNotify
+        event, and some servers (e.g. Xephyr) also send these for
+        configurations that have not actually changed, for example in
+        response to qtile's own output probing at startup.
     * features
       - The `sync` command is now a real synchronization barrier: it only
         returns once qtile has processed all events resulting from its own

@@ -845,6 +845,13 @@ hooks: list[Hook] = [
         """
         Called when the output configuration is changed (e.g. via randr in X11).
 
+        qtile no longer fires this hook unconditionally at startup and on
+        config reloads; it fires whenever the backend reports a configuration
+        change. Note that on X11 exactly when that happens is somewhat server
+        dependent: some servers also send change notifications for
+        configurations that have not actually changed (e.g. in response to
+        qtile's own output probing at startup).
+
         .. note::
 
           If you have ``reconfigure_screens = True`` in your config then qtile
