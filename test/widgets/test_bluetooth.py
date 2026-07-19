@@ -4,10 +4,10 @@ import os
 import shutil
 import signal
 import subprocess
-import time
 from enum import Enum
 
 import pytest
+from dbus_fast import Message
 from dbus_fast.aio import MessageBus
 from dbus_fast.constants import BusType, PropertyAccess
 from dbus_fast.service import ServiceInterface, dbus_property, method
@@ -212,8 +212,29 @@ def fake_dbus_daemon(monkeypatch):
     p = multiprocessing.Process(target=Bluez().run)
     p.start()
 
-    # Pause for the dbus interface to come up
-    time.sleep(1)
+    # Wait for the fake bluez service to claim its name on the bus
+    async def bluez_name_owned():
+        bus = await MessageBus(bus_type=BusType.SESSION).connect()
+        try:
+            reply = await bus.call(
+                Message(
+                    destination="org.freedesktop.DBus",
+                    path="/org/freedesktop/DBus",
+                    interface="org.freedesktop.DBus",
+                    member="NameHasOwner",
+                    signature="s",
+                    body=[BLUEZ_SERVICE],
+                )
+            )
+            return reply.body[0]
+        finally:
+            bus.disconnect()
+
+    @Retry(ignore_exceptions=(AssertionError, OSError))
+    def wait_for_bluez():
+        assert asyncio.run(bluez_name_owned())
+
+    wait_for_bluez()
 
     yield
 

@@ -1,5 +1,3 @@
-import time
-
 import pytest
 
 import libqtile
@@ -45,8 +43,16 @@ def test_dgroup_persist(manager):
     # close window
     manager.kill_window(one)
 
-    # wait for window to close and group to NOT be destroyed
-    time.sleep(2)
+    # dgroups deletes empty non-persistent groups on a call_later timer, and
+    # by the time kill_window() returns the client_killed hook has run, so
+    # any (wrong) deletion timer has been scheduled by now. Wait until no
+    # deletions are pending: after that, the group would have been destroyed
+    # if it were ever going to be.
+    @Retry(ignore_exceptions=(AssertionError,))
+    def assert_no_pending_deletions():
+        assert manager.c.eval("len(self.dgroups.timeout)") == "0"
+
+    assert_no_pending_deletions()
 
     # check if dgroup still exists
     assert len(manager.c.get_groups()) == 3
@@ -67,11 +73,12 @@ def test_dgroup_nonpersist(manager):
     # close window
     manager.kill_window(one)
 
-    # wait for window to close and group to be destroyed
-    time.sleep(2)
+    # wait for dgroups' deletion timer to destroy the group
+    @Retry(ignore_exceptions=(AssertionError,))
+    def assert_group_deleted():
+        assert len(manager.c.get_groups()) == 2
 
-    # check if dgroup does not exist anymore
-    assert len(manager.c.get_groups()) == 2
+    assert_group_deleted()
 
 
 @dgroups_spawn_config

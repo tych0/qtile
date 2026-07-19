@@ -1,5 +1,3 @@
-from time import sleep
-
 import pytest
 
 import libqtile.config
@@ -222,7 +220,6 @@ def test_ratiotile_basic(manager):
     manager.test_window("one")
     manager.test_window("two")
     manager.test_window("three")
-    sleep(0.1)
     assert manager.c.window.info()["width"] == 264
     assert manager.c.window.info()["height"] == 598
     assert manager.c.window.info()["x"] == 0

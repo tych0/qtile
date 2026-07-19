@@ -47,9 +47,14 @@ async def test_repl_server_executes_code():
     start_task = asyncio.create_task(repl.start(locals_dict=locals_dict))
 
     # Wait for the server to bind the port
-    await asyncio.sleep(0.1)
-
-    reader, writer = await asyncio.open_connection("localhost", REPL_PORT)
+    for _ in range(50):
+        try:
+            reader, writer = await asyncio.open_connection("localhost", REPL_PORT)
+            break
+        except OSError:
+            await asyncio.sleep(0.1)
+    else:
+        raise AssertionError("REPL server did not come up")
 
     try:
         # Read welcome message
