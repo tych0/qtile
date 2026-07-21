@@ -525,6 +525,29 @@ class Screen(CommandObject):
             self.wallpaper = os.path.expanduser(self.wallpaper)
             self.paint(self.wallpaper, self.wallpaper_mode)
 
+    def _adopt_config(self, other: Screen) -> None:
+        """
+        Adopt the configuration of `other`, a newly created Screen object
+        representing the same output as this one.
+
+        generate_screens implementations typically build brand new Screen (and
+        Bar) objects on every call, but other objects (groups, current_screen,
+        etc.) hold references to the existing Screen objects. Moving the new
+        configuration onto the existing object lets us keep those references
+        valid while still honouring the newly generated configuration.
+        """
+        for position in ("top", "bottom", "left", "right"):
+            old_gap = getattr(self, position)
+            new_gap = getattr(other, position)
+            if old_gap is not None and old_gap is not new_gap:
+                old_gap.finalize()
+            setattr(self, position, new_gap)
+        self.background = other.background
+        self.wallpaper = other.wallpaper
+        self.wallpaper_mode = other.wallpaper_mode
+        self.x11_drag_polling_rate = other.x11_drag_polling_rate
+        self.output = other.output
+
     def paint(self, path: str, mode: str | None = None) -> None:
         if self.qtile:
             self.qtile.paint_screen(self, path, mode)
@@ -583,11 +606,6 @@ class Screen(CommandObject):
             return
 
         if new_group.screen == self:
-            # The group may still reference a stale Screen object that this
-            # one replaced during screen reconfiguration; the two compare
-            # equal (see __eq__), so rebind both sides to the live objects.
-            new_group.screen = self
-            self.group = new_group
             return
 
         if save_prev and new_group is not self.group:

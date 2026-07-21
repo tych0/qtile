@@ -460,6 +460,21 @@ class Qtile(CommandObject):
                 scr = Screen()
             scr.output = info
 
+            if self.config.generate_screens is not None:
+                # generate_screens implementations typically build brand new
+                # Screen objects on every call, but other objects (groups,
+                # current_screen, etc.) hold references to the existing Screen
+                # objects. If an existing Screen represents the same output
+                # (Screen.__eq__), keep that object and move the newly
+                # generated configuration onto it.
+                for existing in self.screens:
+                    if existing is scr:
+                        break
+                    if existing == scr and not any(existing is s for s in new_screens):
+                        existing._adopt_config(scr)
+                        scr = existing
+                        break
+
             if not hasattr(self, "current_screen") or reloading:
                 self.current_screen = scr
                 reloading = False

@@ -272,6 +272,15 @@ def test_generate_screens_transient_output_states(
         state_file.write_text(str(i))
         manager_nospawn.c.reconfigure_screens()
 
+    # DP-6 and DP-7 were present in the previous state, so even though
+    # generate_screens returned new Screen objects, the existing objects
+    # must have been reused (with the new configuration adopted onto them)
+    ids_before = ast.literal_eval(manager_nospawn.c.eval("[id(s) for s in self.screens]"))
+    state_file.write_text(str(len(states) - 1))
+    manager_nospawn.c.reconfigure_screens()
+    ids_after = ast.literal_eval(manager_nospawn.c.eval("[id(s) for s in self.screens]"))
+    assert ids_before == ids_after
+
     # Screens reflect the final output state
     screens = manager_nospawn.c.get_screens()
     assert len(screens) == 2

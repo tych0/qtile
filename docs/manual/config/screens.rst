@@ -223,6 +223,15 @@ into::
     ``generate_screens`` is defined it takes precedence and the ``screens``
     variable is ignored.
 
+.. note::
+    ``generate_screens`` is called again every time the outputs change (e.g.
+    when a monitor is plugged in or reconfigured). If a returned ``Screen``
+    represents an output that qtile already has a ``Screen`` for (matched by
+    the output's ``port``/``make``/``model``/``serial``), qtile keeps using
+    the existing ``Screen`` object and moves the newly returned configuration
+    (bars, wallpaper, etc.) onto it, so state attached to the screen (such as
+    its group) is preserved.
+
 Fake Screens
 ============
 
