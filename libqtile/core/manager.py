@@ -460,6 +460,15 @@ class Qtile(CommandObject):
                 scr = Screen()
             scr.output = info
 
+            if self.config.generate_screens is not None:
+                for existing in self.screens:
+                    if existing is scr:
+                        break
+                    if existing == scr and not any(existing is s for s in new_screens):
+                        existing._adopt_config(scr)
+                        scr = existing
+                        break
+
             if not hasattr(self, "current_screen") or reloading:
                 self.current_screen = scr
                 reloading = False
@@ -502,11 +511,16 @@ class Qtile(CommandObject):
             )
             new_screens.append(scr)
 
-        for screen in self.screens:
-            if screen not in new_screens:
-                screen.finalize_gaps()
-
         self.screens = new_screens
+
+        if self.screens and not any(self.current_screen is screen for screen in self.screens):
+            for screen in self.screens:
+                if screen == self.current_screen:
+                    self.current_screen = screen
+                    break
+            else:
+                self.current_screen = self.screens[0]
+                hook.fire("current_screen_change")
 
     @expose_command()
     def reconfigure_screens(self, *_: list[Any], **__: dict[Any, Any]) -> None:

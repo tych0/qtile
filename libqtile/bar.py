@@ -324,6 +324,7 @@ class Bar(Gap, configurable.Configurable, CommandObject):
 
         hook.subscribe.setgroup(self.set_layer)
         hook.subscribe.startup_complete(self.set_layer)
+        self.set_layer()
 
         self._remove_crashed_widgets(crashed_widgets)
         self.draw()
