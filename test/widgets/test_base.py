@@ -27,7 +27,14 @@ class TimerWidget(_Widget):
 
     @expose_command()
     def get_active_timers(self):
-        active = [x for x in self._futures if getattr(x, "_scheduled", False)]
+        # A cancelled TimerHandle keeps _scheduled == True until asyncio
+        # lazily purges it from the timer heap, which only happens once it
+        # reaches the top of the heap; an unrelated pending timer with an
+        # earlier deadline (e.g. the backend's screen change debouncer) can
+        # delay that indefinitely, so check cancelled() explicitly.
+        active = [
+            x for x in self._futures if getattr(x, "_scheduled", False) and not x.cancelled()
+        ]
         return len(active)
 
 
