@@ -503,10 +503,25 @@ class Qtile(CommandObject):
             new_screens.append(scr)
 
         for screen in self.screens:
-            if screen not in new_screens:
+            # Compare by identity: a recreated Screen compares equal to the
+            # object it replaced (see Screen.__eq__), but the replaced
+            # object's bars still need to be finalized.
+            if not any(screen is new_screen for new_screen in new_screens):
                 screen.finalize_gaps()
 
         self.screens = new_screens
+
+        # current_screen may reference a Screen object that was replaced
+        # above; rebind it to the object that now represents the same output.
+        # If that output no longer exists, fall back to the first screen.
+        if self.screens and not any(self.current_screen is screen for screen in self.screens):
+            for screen in self.screens:
+                if screen == self.current_screen:
+                    self.current_screen = screen
+                    break
+            else:
+                self.current_screen = self.screens[0]
+                hook.fire("current_screen_change")
 
     @expose_command()
     def reconfigure_screens(self, *_: list[Any], **__: dict[Any, Any]) -> None:

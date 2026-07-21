@@ -142,6 +142,10 @@ class _Group(CommandObject):
     def set_screen(self, screen, warp=True):
         """Set this group's screen to screen"""
         if screen == self.screen:
+            # A recreated Screen compares equal to the object it replaced if
+            # both represent the same output (see Screen.__eq__), but we must
+            # not keep laying out against the replaced object's geometry.
+            self.screen = screen
             return
         self.screen = screen
         if self.screen:

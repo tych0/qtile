@@ -1,6 +1,9 @@
 Qtile x.xx.x, released xxxx-xx-xx:
     * features
     * bugfixes
+      - Fix stale Screen references (groups, current_screen, leaked bars)
+        when screens are reconfigured with new Screen objects, e.g. via
+        generate_screens during a series of output changes
 
 Qtile 0.36.0, released 2026-05-22:
     * features

@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 import pytest
@@ -211,3 +212,93 @@ def test_generate_screens_serial_matching(manager_nospawn, minimal_conf_noscreen
     assert manager_nospawn.c.screen[0].info()["serial"] == "monitor_left"
     assert manager_nospawn.c.screen[1].bar["top"].widget["textbox"].get() == "right_config"
     assert manager_nospawn.c.screen[1].info()["serial"] == "monitor_right"
+
+
+def test_generate_screens_transient_output_states(
+    manager_nospawn, minimal_conf_noscreen, monkeypatch, tmp_path
+):
+    # During a wlr-output-management transaction the backend can report a
+    # series of transient output states, firing screen_change (and thus
+    # reconfigure_screens) for each one. When generate_screens returns brand
+    # new Screen objects every time, references held elsewhere (groups,
+    # current_screen) must be rebound to the new objects and replaced bars
+    # finalized, so that the final state's geometry is what everything is
+    # laid out against.
+    states = [
+        # projector only
+        [Output("HDMI-A-1", None, None, "hdmi", ScreenRect(0, 0, 3840, 2160))],
+        # both monitors appear, unscaled
+        [
+            Output("HDMI-A-1", None, None, "hdmi", ScreenRect(0, 0, 3840, 2160)),
+            Output("DP-6", None, None, "left", ScreenRect(3840, 0, 3840, 2160)),
+            Output("DP-7", None, None, "right", ScreenRect(7680, 0, 3840, 2160)),
+        ],
+        # projector disabled
+        [
+            Output("DP-6", None, None, "left", ScreenRect(0, 0, 3840, 2160)),
+            Output("DP-7", None, None, "right", ScreenRect(3840, 0, 3840, 2160)),
+        ],
+        # projector transiently re-enabled mid-transaction
+        [
+            Output("DP-6", None, None, "left", ScreenRect(0, 0, 3840, 2160)),
+            Output("DP-7", None, None, "right", ScreenRect(3840, 0, 3840, 2160)),
+            Output("HDMI-A-1", None, None, "hdmi", ScreenRect(7680, 0, 3840, 2160)),
+        ],
+        # final state: monitors scaled, projector off
+        [
+            Output("DP-6", None, None, "left", ScreenRect(0, 0, 1920, 1080)),
+            Output("DP-7", None, None, "right", ScreenRect(1920, 0, 1920, 1080)),
+        ],
+    ]
+
+    state_file = tmp_path / "output_state"
+    state_file.write_text("0")
+
+    def gen_screens(outputs: list[Output]) -> list[Screen]:
+        # A new Screen (and Bar) object for every output on every call
+        return [make_screen(text=output.port) for output in outputs]
+
+    minimal_conf_noscreen.generate_screens = staticmethod(gen_screens)
+
+    def read_outputs(self) -> list[Output]:
+        return states[int(state_file.read_text())]
+
+    monkeypatch.setattr(
+        f"libqtile.backend.{manager_nospawn.backend.name}.core.Core.get_output_info", read_outputs
+    )
+    manager_nospawn.start(minimal_conf_noscreen)
+
+    for i in range(1, len(states)):
+        state_file.write_text(str(i))
+        manager_nospawn.c.reconfigure_screens()
+
+    # Screens reflect the final output state
+    screens = manager_nospawn.c.get_screens()
+    assert len(screens) == 2
+    assert manager_nospawn.c.screen[0].info()["port"] == "DP-6"
+    assert manager_nospawn.c.screen[1].info()["port"] == "DP-7"
+    assert (screens[0]["x"], screens[0]["y"], screens[0]["width"], screens[0]["height"]) == (
+        0,
+        0,
+        1920,
+        1080,
+    )
+    assert (screens[1]["x"], screens[1]["y"], screens[1]["width"], screens[1]["height"]) == (
+        1920,
+        0,
+        1920,
+        1080,
+    )
+
+    # Groups must reference the live Screen objects, not stale, replaced ones
+    # that compare equal but have transient geometry
+    assert manager_nospawn.c.eval("all(s.group.screen is s for s in self.screens)") == "True"
+
+    # current_screen must be one of the live Screen objects
+    current_screen_id = int(manager_nospawn.c.eval("id(self.current_screen)"))
+    screen_ids = ast.literal_eval(manager_nospawn.c.eval("[id(s) for s in self.screens]"))
+    assert current_screen_id in screen_ids
+
+    # Replaced screens' bars must have been finalized: one bar window per
+    # remaining screen, no leaks from earlier reconfigurations
+    assert len(manager_nospawn.c.internal_windows()) == 2

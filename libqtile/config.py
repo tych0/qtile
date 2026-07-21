@@ -583,6 +583,11 @@ class Screen(CommandObject):
             return
 
         if new_group.screen == self:
+            # The group may still reference a stale Screen object that this
+            # one replaced during screen reconfiguration; the two compare
+            # equal (see __eq__), so rebind both sides to the live objects.
+            new_group.screen = self
+            self.group = new_group
             return
 
         if save_prev and new_group is not self.group:
