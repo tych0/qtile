@@ -684,6 +684,73 @@ def test_screen_change(manager_nospawn):
 
 
 @pytest.mark.usefixtures("hook_fixture")
+def test_screen_change_debounce():
+    from libqtile.backend.base.core import Core
+
+    class DummyCore(Core):
+        name = "dummy"
+        display_name = "dummy"
+
+        def finalize(self):
+            pass
+
+        def setup_listener(self):
+            pass
+
+        def remove_listener(self):
+            pass
+
+        def get_output_info(self):
+            return []
+
+        def grab_key(self, key):
+            return (0, 0)
+
+        def ungrab_key(self, key):
+            return (0, 0)
+
+        def ungrab_keys(self):
+            pass
+
+        def grab_button(self, mouse):
+            return 0
+
+    events = []
+    hook.subscribe.screen_change(events.append)
+
+    core = DummyCore()
+
+    async def burst():
+        # A burst of events fires the hook once, with the most recent event
+        for i in range(5):
+            core.fire_screen_change(i)
+            await asyncio.sleep(0.01)
+        assert events == []
+        await asyncio.sleep(core.screen_change_debounce + 0.1)
+        assert events == [4]
+
+        # Once things have settled, a new event fires the hook again
+        core.fire_screen_change(5)
+        await asyncio.sleep(core.screen_change_debounce + 0.1)
+        assert events == [4, 5]
+
+    asyncio.run(burst())
+
+    # Without a running event loop, the hook fires immediately
+    core.fire_screen_change(6)
+    assert events == [4, 5, 6]
+
+    # A cancelled pending event is dropped
+    async def cancelled():
+        core.fire_screen_change(7)
+        core._cancel_screen_change()
+        await asyncio.sleep(core.screen_change_debounce + 0.1)
+        assert events == [4, 5, 6]
+
+    asyncio.run(cancelled())
+
+
+@pytest.mark.usefixtures("hook_fixture")
 def test_screens_reconfigured(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):

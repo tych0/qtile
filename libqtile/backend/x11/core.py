@@ -175,6 +175,7 @@ class Core(base.Core):
         return "x11"
 
     def finalize(self) -> None:
+        self._cancel_screen_change()
         with contextlib.suppress(xcffib.ConnectionException):
             self.conn.conn.core.DeletePropertyChecked(
                 self._root.wid,
@@ -826,7 +827,7 @@ class Core(base.Core):
             self.conn.fixup_focus()
 
     def handle_ScreenChangeNotify(self, event) -> None:  # noqa: N802
-        hook.fire("screen_change", event)
+        self.fire_screen_change(event)
 
     def _fake_input(self, input_type, detail, x=0, y=0) -> None:
         self._xtest.FakeInput(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import typing
 from abc import ABCMeta, abstractmethod
@@ -23,6 +24,15 @@ class Core(CommandObject, metaclass=ABCMeta):
     qtile: Qtile
     idle_inhibitor_manager: IdleInhibitorManager[Any]
     idle_notifier: IdleNotifier
+
+    # Screen change events often arrive in bursts, e.g. as an xrandr call or a
+    # wlr-output-management transaction applies each output's settings in
+    # turn. The screen_change hook only fires once the events have settled for
+    # this long (in seconds), so that we reconfigure screens once instead of
+    # for every intermediate state.
+    screen_change_debounce: float = 0.15
+    _screen_change_timer: asyncio.TimerHandle | None = None
+    _screen_change_event: Any = None
 
     @property
     @abstractmethod
@@ -54,6 +64,40 @@ class Core(CommandObject, metaclass=ABCMeta):
 
     def update_desktops(self, groups: list[_Group], index: int) -> None:
         """Set the current desktops of the window manager"""
+
+    def fire_screen_change(self, event: Any = None) -> None:
+        """
+        Fire the screen_change hook, debounced.
+
+        Backends should route screen change events through this instead of
+        firing the hook directly: the hook fires once, with the most recent
+        event, after screen_change_debounce seconds without further events.
+        """
+        self._screen_change_event = event
+        try:
+            eventloop = asyncio.get_running_loop()
+        except RuntimeError:
+            # There is no event loop yet (we are still starting up), so we
+            # cannot defer the hook; fire it directly.
+            self._flush_screen_change()
+            return
+        if self._screen_change_timer is not None:
+            self._screen_change_timer.cancel()
+        self._screen_change_timer = eventloop.call_later(
+            self.screen_change_debounce, self._flush_screen_change
+        )
+
+    def _flush_screen_change(self) -> None:
+        self._screen_change_timer = None
+        event, self._screen_change_event = self._screen_change_event, None
+        hook.fire("screen_change", event)
+
+    def _cancel_screen_change(self) -> None:
+        """Drop any pending debounced screen_change hook; call on finalize."""
+        if self._screen_change_timer is not None:
+            self._screen_change_timer.cancel()
+            self._screen_change_timer = None
+        self._screen_change_event = None
 
     @abstractmethod
     def get_output_info(self) -> list[config.Output]:
