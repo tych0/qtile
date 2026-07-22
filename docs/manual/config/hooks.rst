@@ -37,7 +37,14 @@ A list of available hooks can be found in the
 Autostart
 ---------
 
-If you want to run commands or spawn some applications when Qtile starts, you'll
+If you just want to launch the applications that are set up in the `XDG
+autostart <https://specifications.freedesktop.org/autostart-spec/autostart-spec-latest.html>`_
+directories (e.g. entries installed by applications into
+``~/.config/autostart`` or ``/etc/xdg/autostart``), you can set
+``xdg_autostart = True`` in your config and qtile will launch them on first
+startup for you.
+
+If you want to run arbitrary commands or spawn some applications when Qtile starts, you'll
 want to look at the ``startup`` and ``startup_once`` hooks. ``startup`` is
 emitted every time Qtile starts (including restarts), whereas ``startup_once``
 is only emitted on the very first startup.

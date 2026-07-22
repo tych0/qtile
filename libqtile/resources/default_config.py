@@ -202,6 +202,11 @@ reconfigure_screens = True
 # focus, should we respect this or not?
 auto_minimize = True
 
+# Should qtile launch the applications specified in the XDG autostart
+# directories ($XDG_CONFIG_HOME/autostart and $XDG_CONFIG_DIRS/autostart)
+# when it first starts?
+xdg_autostart = False
+
 # When using the Wayland backend, this can be used to configure input devices.
 wl_input_rules = None
 

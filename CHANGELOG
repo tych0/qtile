@@ -1,5 +1,9 @@
 Qtile x.xx.x, released xxxx-xx-xx:
     * features
+      - Add support for the XDG autostart specification: set the new
+        xdg_autostart config variable to True and qtile will launch the
+        desktop entries in $XDG_CONFIG_HOME/autostart and
+        $XDG_CONFIG_DIRS/autostart on first startup.
     * bugfixes
 
 Qtile 0.36.0, released 2026-05-22:

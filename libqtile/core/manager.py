@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import libqtile
-from libqtile import bar, hook, ipc, utils
+from libqtile import bar, hook, ipc, utils, xdg_autostart
 from libqtile.backend import base
 from libqtile.command import interface
 from libqtile.command.base import (
@@ -183,6 +183,8 @@ class Qtile(CommandObject):
         # do xrandr style manipulation in this hook.
         if not self.no_spawn:
             hook.fire("startup_once")
+            if self.config.xdg_autostart:
+                xdg_autostart.launch_autostart()
             self.no_spawn = True
         hook.fire("startup")
 

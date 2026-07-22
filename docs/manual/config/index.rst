@@ -162,6 +162,16 @@ configuration variables that control specific aspects of Qtile's behavior:
         we're a working one by default. We choose LG3D to maximize irony:
         it is a 3D non-reparenting WM written in java that happens to be
         on java's whitelist.
+    * - ``xdg_autostart``
+      - ``False``
+      - Whether qtile should launch the applications in the `XDG autostart
+        <https://specifications.freedesktop.org/autostart-spec/autostart-spec-latest.html>`_
+        directories (``$XDG_CONFIG_HOME/autostart`` and
+        ``$XDG_CONFIG_DIRS/autostart``) when it first starts. Applications
+        are only launched once per session, i.e. not when qtile is restarted
+        or the config is reloaded. Entries' ``OnlyShowIn`` and ``NotShowIn``
+        keys are matched against ``$XDG_CURRENT_DESKTOP``, or against
+        "qtile" if that variable is unset.
 
 Testing your configuration
 ==========================
