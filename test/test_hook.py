@@ -721,31 +721,37 @@ def test_screen_change_debounce():
     core = DummyCore()
 
     async def burst():
-        # A burst of events fires the hook once, with the most recent event
-        for i in range(5):
+        # An isolated event fires the hook immediately (leading edge)
+        core.fire_screen_change(0)
+        assert events == [0]
+
+        # Events following within the debounce window are coalesced into a
+        # single fire, with the most recent event, once they have settled
+        for i in range(1, 5):
             core.fire_screen_change(i)
             await asyncio.sleep(0.01)
-        assert events == []
+        assert events == [0]
         await asyncio.sleep(core.screen_change_debounce + 0.1)
-        assert events == [4]
+        assert events == [0, 4]
 
-        # Once things have settled, a new event fires the hook again
+        # Once things have settled, a new event fires immediately again
         core.fire_screen_change(5)
+        assert events == [0, 4, 5]
         await asyncio.sleep(core.screen_change_debounce + 0.1)
-        assert events == [4, 5]
 
     asyncio.run(burst())
 
     # Without a running event loop, the hook fires immediately
     core.fire_screen_change(6)
-    assert events == [4, 5, 6]
+    assert events == [0, 4, 5, 6]
 
     # A cancelled pending event is dropped
     async def cancelled():
         core.fire_screen_change(7)
+        core.fire_screen_change(8)
         core._cancel_screen_change()
         await asyncio.sleep(core.screen_change_debounce + 0.1)
-        assert events == [4, 5, 6]
+        assert events == [0, 4, 5, 6, 7]
 
     asyncio.run(cancelled())
 

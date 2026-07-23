@@ -316,7 +316,17 @@ def test_generate_screens_transient_output_states(
     # time (startup_complete has already fired and nothing fires setgroup
     # during reconfiguration), otherwise they are stacked above fullscreen
     # windows until the next setgroup
-    assert manager_nospawn.c.eval("self.screens[0].top.window.kept_below") == "True"
+    if manager_nospawn.backend.name == "x11":
+        assert manager_nospawn.c.eval("self.screens[0].top.window.kept_below") == "True"
+    else:
+        assert (
+            manager_nospawn.c.eval(
+                "self.screens[0].top.window.layer() == "
+                "__import__('libqtile.backend.wayland.window', fromlist=['lib'])"
+                ".lib.LAYER_KEEPBELOW"
+            )
+            == "True"
+        )
 
     # Finalized bars must unsubscribe their set_layer hooks; only the live
     # bars' subscriptions may remain

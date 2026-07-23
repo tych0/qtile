@@ -4,10 +4,12 @@ Qtile x.xx.x, released xxxx-xx-xx:
       - Fix stale Screen references (groups, current_screen, leaked bars)
         when screens are reconfigured with new Screen objects, e.g. via
         generate_screens during a series of output changes
-      - Debounce screen change events in the x11 and wayland backends, so
-        that a burst of output changes (e.g. an xrandr call or a
-        wlr-output-management transaction applying settings output by
-        output) reconfigures screens once, from the settled state
+      - Debounce screen change events in the x11 and wayland backends: an
+        isolated event is handled immediately, but a burst of output
+        changes (e.g. an xrandr call or a wlr-output-management transaction
+        applying settings output by output) is coalesced so that screens
+        are reconfigured from the settled state instead of for every
+        intermediate one
       - Fix bars created after startup (e.g. by generate_screens during a
         screen reconfiguration) being stacked above fullscreen windows
         until the next group switch: the bar's layer is now set when it is

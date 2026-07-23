@@ -27,11 +27,13 @@ class Core(CommandObject, metaclass=ABCMeta):
 
     # Screen change events often arrive in bursts, e.g. as an xrandr call or a
     # wlr-output-management transaction applies each output's settings in
-    # turn. The screen_change hook only fires once the events have settled for
-    # this long (in seconds), so that we reconfigure screens once instead of
+    # turn. An isolated event fires the screen_change hook immediately, but
+    # events following within this window (in seconds) are coalesced into a
+    # single fire once they have settled, so that we don't reconfigure screens
     # for every intermediate state.
     screen_change_debounce: float = 0.15
     _screen_change_timer: asyncio.TimerHandle | None = None
+    _screen_change_pending: bool = False
     _screen_change_event: Any = None
 
     @property
@@ -70,8 +72,10 @@ class Core(CommandObject, metaclass=ABCMeta):
         Fire the screen_change hook, debounced.
 
         Backends should route screen change events through this instead of
-        firing the hook directly: the hook fires once, with the most recent
-        event, after screen_change_debounce seconds without further events.
+        firing the hook directly. An isolated event fires the hook
+        immediately; events following within screen_change_debounce seconds
+        of the previous one are coalesced into a single fire, with the most
+        recent event, once they have settled.
         """
         self._screen_change_event = event
         try:
@@ -81,14 +85,25 @@ class Core(CommandObject, metaclass=ABCMeta):
             # cannot defer the hook; fire it directly.
             self._flush_screen_change()
             return
-        if self._screen_change_timer is not None:
+        if self._screen_change_timer is None:
+            # Leading edge: fire immediately, so that isolated events (e.g. a
+            # monitor being plugged in) are handled without delay; the timer
+            # below coalesces any events that follow.
+            self._flush_screen_change()
+        else:
+            self._screen_change_pending = True
             self._screen_change_timer.cancel()
         self._screen_change_timer = eventloop.call_later(
-            self.screen_change_debounce, self._flush_screen_change
+            self.screen_change_debounce, self._screen_change_settled
         )
 
-    def _flush_screen_change(self) -> None:
+    def _screen_change_settled(self) -> None:
         self._screen_change_timer = None
+        if self._screen_change_pending:
+            self._flush_screen_change()
+
+    def _flush_screen_change(self) -> None:
+        self._screen_change_pending = False
         event, self._screen_change_event = self._screen_change_event, None
         hook.fire("screen_change", event)
 
@@ -97,6 +112,7 @@ class Core(CommandObject, metaclass=ABCMeta):
         if self._screen_change_timer is not None:
             self._screen_change_timer.cancel()
             self._screen_change_timer = None
+        self._screen_change_pending = False
         self._screen_change_event = None
 
     @abstractmethod
