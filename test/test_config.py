@@ -311,3 +311,17 @@ def test_generate_screens_transient_output_states(
     # Replaced screens' bars must have been finalized: one bar window per
     # remaining screen, no leaks from earlier reconfigurations
     assert len(manager_nospawn.c.internal_windows()) == 2
+
+    # Bars recreated after startup must be assigned their layer at configure
+    # time (startup_complete has already fired and nothing fires setgroup
+    # during reconfiguration), otherwise they are stacked above fullscreen
+    # windows until the next setgroup
+    assert manager_nospawn.c.eval("self.screens[0].top.window.kept_below") == "True"
+
+    # Finalized bars must unsubscribe their set_layer hooks; only the live
+    # bars' subscriptions may remain
+    count = manager_nospawn.c.eval(
+        "len([f for f in hook.subscriptions['qtile']['setgroup'] "
+        "if getattr(f, '__name__', '') == 'set_layer'])"
+    )
+    assert count == "2"

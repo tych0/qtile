@@ -8,6 +8,10 @@ Qtile x.xx.x, released xxxx-xx-xx:
         that a burst of output changes (e.g. an xrandr call or a
         wlr-output-management transaction applying settings output by
         output) reconfigures screens once, from the settled state
+      - Fix bars created after startup (e.g. by generate_screens during a
+        screen reconfiguration) being stacked above fullscreen windows
+        until the next group switch: the bar's layer is now set when it is
+        configured, not only from the setgroup/startup_complete hooks
 
 Qtile 0.36.0, released 2026-05-22:
     * features

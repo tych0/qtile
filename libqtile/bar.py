@@ -324,6 +324,11 @@ class Bar(Gap, configurable.Configurable, CommandObject):
 
         hook.subscribe.setgroup(self.set_layer)
         hook.subscribe.startup_complete(self.set_layer)
+        # Set the layer now: a bar created after startup (e.g. by
+        # generate_screens during a screen reconfiguration) would otherwise
+        # not be assigned its layer until the next setgroup, and would be
+        # stacked above fullscreen windows in the meantime.
+        self.set_layer()
 
         self._remove_crashed_widgets(crashed_widgets)
         self.draw()
@@ -400,6 +405,9 @@ class Bar(Gap, configurable.Configurable, CommandObject):
         return None
 
     def finalize(self) -> None:
+        if self._configured:
+            hook.unsubscribe.setgroup(self.set_layer)
+            hook.unsubscribe.startup_complete(self.set_layer)
         if self.future:
             self.future.cancel()
         for widget in self.widgets:
