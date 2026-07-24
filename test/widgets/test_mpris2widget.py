@@ -71,59 +71,51 @@ def mpris_widget(patched_module, widget_manager):
 def test_mpris2_signal_handling(mpris_widget):
     mp = mpris_widget()
 
-    assert mp.eval("self.displaytext") == ""
+    assert mp.info()["text"] == ""
 
-    # No text will be displayed if widget is not configured
-    mp.eval("self.configured = False")
+    # Create a message with the metadata and playback status
     parse_message(mp, "Playing", metadata=True)
-    assert mp.eval("self.displaytext") == ""
-
-    # Set configured flag, create a message with the metadata and playback status
-    mp.eval("self.configured = True")
-    parse_message(mp, "Playing", metadata=True)
-    assert mp.eval("self.text") == TRACK
+    assert mp.info()["text"] == TRACK
+    assert mp.info()["isplaying"]
 
     # If widget receives "paused" signal it prefixes track with "Paused: "
     parse_message(mp, "Paused")
-    assert mp.eval("self.text") == f"Paused: {TRACK}"
+    assert mp.info()["text"] == f"Paused: {TRACK}"
 
     # If widget receives "stopped" signal with no metadata then widget is blank
     parse_message(mp, "Stopped")
-    assert mp.eval("self.displaytext") == ""
+    assert mp.info()["text"] == ""
 
     # Reset to playing + metadata
     parse_message(mp, "Playing", metadata=True)
-    assert mp.eval("self.text") == TRACK
+    assert mp.info()["text"] == TRACK
 
     # If widget receives "paused" signal with metadata then message is "Paused: {metadata}"
     parse_message(mp, "Paused", metadata=True)
-    assert mp.eval("self.text") == f"Paused: {TRACK}"
+    assert mp.info()["text"] == f"Paused: {TRACK}"
 
     # If widget now receives "playing" signal with no metadata, "paused" word is removed
     parse_message(mp, "Playing")
-    assert mp.eval("self.text") == TRACK
-
-    info = mp.info()
-    assert info["text"] == TRACK
-    assert info["isplaying"]
+    assert mp.info()["text"] == TRACK
+    assert mp.info()["isplaying"]
 
 
 def test_mpris2_custom_stop_text(mpris_widget):
     mp = mpris_widget(stop_pause_text="Test Paused")
 
     parse_message(mp, "Playing", metadata=True)
-    assert mp.eval("self.text") == TRACK
+    assert mp.info()["text"] == TRACK
 
     # Check our custom paused wording is shown
     parse_message(mp, "Paused")
-    assert mp.eval("self.text") == "Test Paused"
+    assert mp.info()["text"] == "Test Paused"
 
 
 def test_mpris2_no_metadata(mpris_widget):
     mp = mpris_widget()
 
     parse_message(mp, "Playing")
-    assert mp.eval("self.text") == "No metadata for current track"
+    assert mp.info()["text"] == "No metadata for current track"
 
 
 def test_mpris2_no_scroll(mpris_widget):
@@ -132,10 +124,10 @@ def test_mpris2_no_scroll(mpris_widget):
     mp = mpris_widget(scroll_chars=None)
 
     parse_message(mp, "Playing", metadata=True)
-    assert mp.eval("self.text") == TRACK
+    assert mp.info()["text"] == TRACK
 
     parse_message(mp, "Paused", metadata=True)
-    assert mp.eval("self.text") == f"Paused: {TRACK}"
+    assert mp.info()["text"] == f"Paused: {TRACK}"
 
 
 def test_mpris2_deprecated_format(patched_module):

@@ -17,38 +17,30 @@ def test_widgetbox_widget(manager_nospawn, widget_manager):
     def bar_widgets():
         return [w["name"] for w in topbar.info()["widgets"]]
 
-    # Invalid value should be corrected to default
-    assert box.eval("self.close_button_location") == "left"
-
     # Check only widget in bar is widgetbox
     assert bar_widgets() == ["widgetbox"]
 
-    # Open box
+    # Open box. The invalid close_button_location was corrected to the
+    # default ("left") so the button is before its contents.
     box.toggle()
-
-    # Check it's open
-    assert box.eval("self.box_is_open") == "True"
-
-    # Default text position is left
     assert bar_widgets() == ["widgetbox", "tb_one", "tb_two"]
 
-    # Close box
+    # Close box: widgets are removed
     box.toggle()
-
-    # Check it's closed
-    assert box.eval("self.box_is_open") == "False"
-
-    # Check widgets have been removed
     assert bar_widgets() == ["widgetbox"]
 
-    # Move button to right-hand side
-    box.eval("self.close_button_location = 'right'")
 
-    # Re-open box with new layout
+def test_widgetbox_close_button_right(manager_nospawn, widget_manager):
+    tb_one = TextBox(name="tb_one", text="TB ONE")
+    tb_two = TextBox(name="tb_two", text="TB TWO")
+
+    box = widget_manager(WidgetBox(widgets=[tb_one, tb_two], close_button_location="right"))
+
     box.toggle()
 
-    # Now widgetbox is on the right
-    assert bar_widgets() == ["tb_one", "tb_two", "widgetbox"]
+    # The widgetbox is on the right of its contents
+    widgets = [w["name"] for w in manager_nospawn.c.bar["top"].info()["widgets"]]
+    assert widgets == ["tb_one", "tb_two", "widgetbox"]
 
 
 def test_widgetbox_start_opened(manager_nospawn, minimal_conf_noscreen):

@@ -31,14 +31,10 @@ def test_images_good(tmpdir, svg_img_as_pypath, widget_manager):
 
     wait_for_images()
 
-    widget.eval(
-        "import cairocffi\n"
-        "self._test_result = True\n"
-        "for image in self.images.values():\n"
-        "    if not isinstance(image.pattern, cairocffi.SurfacePattern):\n"
-        "        self._test_result = False"
+    assert (
+        widget.eval("{type(image.pattern).__name__ for image in self.images.values()}")
+        == "{'SurfacePattern'}"
     )
-    assert widget.eval("self._test_result") == "True"
 
 
 def test_emoji():

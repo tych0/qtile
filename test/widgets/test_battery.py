@@ -268,14 +268,7 @@ def test_images_good(tmpdir, svg_img_as_pypath, widget_manager, monkeypatch):
     widget = widget_manager(batt)
     assert widget.eval("len(self.images)") == str(len(BatteryIcon.icon_names))
 
-    widget.eval(
-        "from libqtile import images\n"
-        "self._test_result = True\n"
-        "for img in self.images.values():\n"
-        "    if not isinstance(img, images.Img):\n"
-        "        self._test_result = False"
-    )
-    assert widget.eval("self._test_result") == "True"
+    assert widget.eval("{type(img).__name__ for img in self.images.values()}") == "{'Img'}"
 
 
 def test_images_default(widget_manager, monkeypatch):
@@ -299,14 +292,7 @@ def test_images_default(widget_manager, monkeypatch):
     widget = widget_manager(batt)
     assert widget.eval("len(self.images)") == str(len(BatteryIcon.icon_names))
 
-    widget.eval(
-        "from libqtile import images\n"
-        "self._test_result = True\n"
-        "for img in self.images.values():\n"
-        "    if not isinstance(img, images.Img):\n"
-        "        self._test_result = False"
-    )
-    assert widget.eval("self._test_result") == "True"
+    assert widget.eval("{type(img).__name__ for img in self.images.values()}") == "{'Img'}"
 
 
 def test_battery_background(widget_manager, monkeypatch):
