@@ -401,36 +401,48 @@ class Qtile(CommandObject):
 
     def get_output_info(self) -> list[Output]:
         if self.config.fake_screens is not None:
-            return [
+            outputs = [
                 Output(None, None, None, None, ScreenRect(s.x, s.y, s.width, s.height))
                 for s in self.config.fake_screens
             ]
+        else:
+            # Alias screens with the same x and y coordinates, taking largest
+            xywh: dict[
+                tuple[int, int], tuple[int, int, str | None, str | None, str | None, str | None]
+            ] = {}
+            for info in self.core.get_output_info():
+                pos = (info.rect.x, info.rect.y)
+                width, height, port, make, model, serial = xywh.get(
+                    pos, (0, 0, info.port, info.make, info.model, info.serial)
+                )
+                # if one monitor is wider and one monitor is longer, either
+                # serial number was valid (i.e. we could choose either, since
+                # we're going to project over the whole space). just pick one.
+                xywh[pos] = (
+                    max(width, info.rect.width),
+                    max(height, info.rect.height),
+                    info.port,
+                    info.make,
+                    info.model,
+                    info.serial,
+                )
 
-        # Alias screens with the same x and y coordinates, taking largest
-        xywh: dict[
-            tuple[int, int], tuple[int, int, str | None, str | None, str | None, str | None]
-        ] = {}
-        for info in self.core.get_output_info():
-            pos = (info.rect.x, info.rect.y)
-            width, height, port, make, model, serial = xywh.get(
-                pos, (0, 0, info.port, info.make, info.model, info.serial)
-            )
-            # if one monitor is wider and one monitor is longer, either
-            # serial number was valid (i.e. we could choose either, since
-            # we're going to project over the whole space). just pick one.
-            xywh[pos] = (
-                max(width, info.rect.width),
-                max(height, info.rect.height),
-                info.port,
-                info.make,
-                info.model,
-                info.serial,
-            )
+            outputs = [
+                Output(port, make, model, serial, ScreenRect(x, y, w, h))
+                for (x, y), (w, h, port, make, model, serial) in xywh.items()
+            ]
 
-        return [
-            Output(port, make, model, serial, ScreenRect(x, y, w, h))
-            for (x, y), (w, h, port, make, model, serial) in xywh.items()
-        ]
+        if not outputs:
+            # The backend may report no outputs, e.g. if qtile is (re)started
+            # while all monitors are off or mid way through a screen
+            # reconfiguration. We need at least one screen to run at all
+            # (current_screen, screens[0], etc. are assumed to exist
+            # everywhere), so invent one; when an output shows up, the screen
+            # change notification will reconfigure us to match reality.
+            logger.warning("backend reported no outputs; falling back to one 800x600 screen")
+            outputs.append(Output(None, None, None, None, ScreenRect(0, 0, 800, 600)))
+
+        return outputs
 
     def get_screens_from_config(self, output_info: list[Output]) -> list[Screen]:
         if self.config.fake_screens is not None:

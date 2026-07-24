@@ -115,6 +115,26 @@ def test_screen_serial_ordering_the_order(manager_nospawn, minimal_conf_noscreen
     assert manager_nospawn.c.screen[1].info()["serial"] == "b"
 
 
+def test_no_outputs_fallback_screen(manager_nospawn, minimal_conf_noscreen, monkeypatch):
+    # if the backend reports no outputs (e.g. qtile was restarted while all
+    # monitors were off), qtile should invent a screen rather than starting
+    # with none at all and crashing on current_screen accesses
+    def no_outputs(self) -> list[Output]:
+        return []
+
+    monkeypatch.setattr(
+        f"libqtile.backend.{manager_nospawn.backend.name}.core.Core.get_output_info", no_outputs
+    )
+    manager_nospawn.start(minimal_conf_noscreen)
+
+    screens = manager_nospawn.c.get_screens()
+    assert len(screens) == 1
+    assert screens[0]["width"] == 800
+    assert screens[0]["height"] == 600
+    # current_screen is usable
+    assert manager_nospawn.c.screen.info()["index"] == 0
+
+
 def make_screen(text: str = "") -> Screen:
     screen = Screen(top=Bar([TextBox(text)], 10))
     return screen
