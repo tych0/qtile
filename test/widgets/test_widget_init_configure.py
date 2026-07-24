@@ -8,7 +8,6 @@ import libqtile.widget as widgets
 from libqtile.widget.base import ORIENTATION_BOTH, ORIENTATION_HORIZONTAL, ORIENTATION_VERTICAL
 from libqtile.widget.clock import Clock
 from libqtile.widget.crashme import _CrashMe
-from test.widgets.conftest import FakeBar
 
 # This file runs a very simple test to check that widgets can be initialised
 # and that keyword arguments are added to default values.
@@ -140,9 +139,18 @@ def test_widget_init_config_set_width(widget_class, kwargs):
     assert widget
 
 
-def test_incompatible_orientation(fake_qtile, fake_window):
+def test_incompatible_orientation(manager_nospawn, minimal_conf_noscreen):
     clk1 = Clock()
     clk1.orientations = ORIENTATION_VERTICAL
-    fakebar = FakeBar([clk1], window=fake_window)
-    with pytest.raises(libqtile.confreader.ConfigError):
-        clk1._configure(fake_qtile, fakebar)
+
+    config = minimal_conf_noscreen
+    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([clk1], 10))]
+
+    # Adding a vertical-only widget to a horizontal bar raises a ConfigError
+    # during the bar's configuration so the widget is replaced with a
+    # ConfigErrorWidget.
+    manager_nospawn.start(config)
+
+    w = manager_nospawn.c.bar["top"].info()["widgets"][0]
+    assert w["name"] == "configerrorwidget"
+    assert w["text"] == "Widget crashed: Clock (click to hide)"

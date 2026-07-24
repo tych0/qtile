@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
-from importlib import reload
 
 import pytest
 
+import libqtile.bar
+import libqtile.config
 from libqtile.widget import pomodoro
-from test.widgets.conftest import FakeBar
 
 COLOR_INACTIVE = "123456"
 COLOR_ACTIVE = "654321"
@@ -27,14 +27,10 @@ class MockDatetime(datetime):
 
 
 @pytest.fixture
-def patched_widget(monkeypatch):
-    reload(pomodoro)
+def pomodoro_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+    MockDatetime._adjustment = timedelta(0)
     monkeypatch.setattr("libqtile.widget.pomodoro.datetime", MockDatetime)
-    yield pomodoro
 
-
-@pytest.mark.usefixtures("patched_widget")
-def test_pomodoro(fake_qtile, fake_window):
     widget = pomodoro.Pomodoro(
         update_interval=100,
         color_active=COLOR_ACTIVE,
@@ -52,58 +48,74 @@ def test_pomodoro(fake_qtile, fake_window):
         prefix_paused=PREFIX_PAUSED,
     )
 
-    fakebar = FakeBar([widget], window=fake_window)
-    widget._configure(fake_qtile, fakebar)
+    config = minimal_conf_noscreen
+    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
+    manager_nospawn.start(config)
+
+    yield manager_nospawn.c.widget["pomodoro"]
+
+
+def advance_time(widget, minutes):
+    """Move the mocked clock forward by the given number of minutes."""
+    widget.eval(
+        "from datetime import timedelta\n"
+        "from libqtile.widget import pomodoro\n"
+        f"pomodoro.datetime._adjustment += timedelta(minutes={minutes})"
+    )
+
+
+def test_pomodoro(pomodoro_manager):
+    widget = pomodoro_manager
 
     # When we start, widget is inactive
-    assert widget.poll() == PREFIX_INACTIVE
-    assert widget.layout.colour == COLOR_INACTIVE
+    assert widget.eval("self.poll()") == PREFIX_INACTIVE
+    assert widget.eval("self.layout.colour") == COLOR_INACTIVE
 
     # Left clicking toggles state
     widget.toggle_break()
-    assert widget.poll() == f"{PREFIX_ACTIVE}0:15:00"
-    assert widget.layout.colour == COLOR_ACTIVE
+    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:15:00"
+    assert widget.eval("self.layout.colour") == COLOR_ACTIVE
 
     # Another left click should pause
     widget.toggle_break()
-    assert widget.poll() == PREFIX_PAUSED
-    assert widget.layout.colour == COLOR_INACTIVE
+    assert widget.eval("self.poll()") == PREFIX_PAUSED
+    assert widget.eval("self.layout.colour") == COLOR_INACTIVE
 
     widget.toggle_break()
     # Add 5 mins should take 5 mins off our timer
-    MockDatetime._adjustment += timedelta(minutes=5)
-    assert widget.poll() == f"{PREFIX_ACTIVE}0:10:00"
-    assert widget.layout.colour == COLOR_ACTIVE
+    advance_time(widget, 5)
+    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:10:00"
+    assert widget.eval("self.layout.colour") == COLOR_ACTIVE
 
     # Add 10 mins should take us to end of first pomodoro
     # So we get a short break between pomodori
-    MockDatetime._adjustment += timedelta(minutes=10)
-    assert widget.poll() == f"{PREFIX_BREAK}0:05:00"
-    assert widget.layout.colour == COLOR_BREAK
+    advance_time(widget, 10)
+    assert widget.eval("self.poll()") == f"{PREFIX_BREAK}0:05:00"
+    assert widget.eval("self.layout.colour") == COLOR_BREAK
 
     # Add 5 mins should take us to start of second pomodoro
-    MockDatetime._adjustment += timedelta(minutes=5)
-    assert widget.poll() == f"{PREFIX_ACTIVE}0:15:00"
-    assert widget.layout.colour == COLOR_ACTIVE
+    advance_time(widget, 5)
+    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:15:00"
+    assert widget.eval("self.layout.colour") == COLOR_ACTIVE
 
     # Add 15 mins should take us to end of second pomodoro
     # and start of long break (as there are only two pomodori)
-    MockDatetime._adjustment += timedelta(minutes=15)
-    assert widget.poll() == f"{PREFIX_LONG_BREAK}0:10:00"
-    assert widget.layout.colour == COLOR_BREAK
+    advance_time(widget, 15)
+    assert widget.eval("self.poll()") == f"{PREFIX_LONG_BREAK}0:10:00"
+    assert widget.eval("self.layout.colour") == COLOR_BREAK
 
     # Move forward so we're at start of next pomodoro
-    MockDatetime._adjustment += timedelta(minutes=10)
-    assert widget.poll() == f"{PREFIX_ACTIVE}0:15:00"
+    advance_time(widget, 10)
+    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:15:00"
 
     # Advance into pomodoro
-    MockDatetime._adjustment += timedelta(minutes=10)
-    assert widget.poll() == f"{PREFIX_ACTIVE}0:05:00"
+    advance_time(widget, 10)
+    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:05:00"
 
     # Right-click toggles active state
     widget.toggle_active()
-    assert widget.poll() == PREFIX_INACTIVE
+    assert widget.eval("self.poll()") == PREFIX_INACTIVE
 
     # Right-click again resets status
     widget.toggle_active()
-    assert widget.poll() == f"{PREFIX_ACTIVE}0:15:00"
+    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:15:00"

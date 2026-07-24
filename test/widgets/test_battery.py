@@ -1,9 +1,39 @@
 import pytest
 
+import libqtile.bar
+import libqtile.config
 from libqtile import images
 from libqtile.widget import battery
 from libqtile.widget.battery import Battery, BatteryIcon, BatteryState, BatteryStatus
-from test.widgets.conftest import TEST_DIR, FakeBar
+from test.widgets.conftest import TEST_DIR
+
+
+@pytest.fixture
+def battery_manager(manager_nospawn, minimal_conf_noscreen):
+    def start(widget):
+        config = minimal_conf_noscreen
+        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
+        manager_nospawn.start(config)
+
+        return manager_nospawn.c.widget[widget.name]
+
+    return start
+
+
+def set_battery_status(widget, state, percent):
+    """Update the dummy battery's status and repoll the widget."""
+    widget.eval(
+        "from libqtile.widget.battery import BatteryStatus, BatteryState\n"
+        "self._battery._status = BatteryStatus(\n"
+        f"    state=BatteryState.{state},\n"
+        f"    percent={percent},\n"
+        "    power=15.0,\n"
+        "    time=1729,\n"
+        "    charge_start_threshold=0,\n"
+        "    charge_end_threshold=100,\n"
+        ")\n"
+        "self.update(self.poll())"
+    )
 
 
 class DummyBattery:
@@ -227,7 +257,7 @@ def test_images_fail():
         batt.setup_images()
 
 
-def test_images_good(tmpdir, fake_bar, svg_img_as_pypath):
+def test_images_good(tmpdir, svg_img_as_pypath, battery_manager, monkeypatch):
     """Test BatteryIcon() with a good theme_path
 
     This theme path does contain all of the required images.
@@ -236,30 +266,6 @@ def test_images_good(tmpdir, fake_bar, svg_img_as_pypath):
         target = tmpdir.join(name + ".svg")
         svg_img_as_pypath.copy(target)
 
-    batt = BatteryIcon(theme_path=str(tmpdir))
-    batt.fontsize = 12
-    batt.bar = fake_bar
-    batt.setup_images()
-    assert len(batt.images) == len(BatteryIcon.icon_names)
-    for name, img in batt.images.items():
-        assert isinstance(img, images.Img)
-
-
-def test_images_default(fake_bar):
-    """Test BatteryIcon() with the default theme_path
-
-    Ensure that the default images are successfully loaded.
-    """
-    batt = BatteryIcon()
-    batt.fontsize = 12
-    batt.bar = fake_bar
-    batt.setup_images()
-    assert len(batt.images) == len(BatteryIcon.icon_names)
-    for name, img in batt.images.items():
-        assert isinstance(img, images.Img)
-
-
-def test_battery_background(fake_qtile, fake_window, monkeypatch):
     ok = BatteryStatus(
         state=BatteryState.DISCHARGING,
         percent=0.5,
@@ -268,9 +274,59 @@ def test_battery_background(fake_qtile, fake_window, monkeypatch):
         charge_start_threshold=0,
         charge_end_threshold=100,
     )
-    low = BatteryStatus(
+
+    with monkeypatch.context() as mp:
+        mp.setattr(battery, "load_battery", dummy_load_battery(ok))
+        batt = BatteryIcon(theme_path=str(tmpdir))
+
+    widget = battery_manager(batt)
+    assert widget.eval("len(self.images)") == str(len(BatteryIcon.icon_names))
+
+    widget.eval(
+        "from libqtile import images\n"
+        "self._test_result = True\n"
+        "for img in self.images.values():\n"
+        "    if not isinstance(img, images.Img):\n"
+        "        self._test_result = False"
+    )
+    assert widget.eval("self._test_result") == "True"
+
+
+def test_images_default(battery_manager, monkeypatch):
+    """Test BatteryIcon() with the default theme_path
+
+    Ensure that the default images are successfully loaded.
+    """
+    ok = BatteryStatus(
         state=BatteryState.DISCHARGING,
-        percent=0.1,
+        percent=0.5,
+        power=15.0,
+        time=1729,
+        charge_start_threshold=0,
+        charge_end_threshold=100,
+    )
+
+    with monkeypatch.context() as mp:
+        mp.setattr(battery, "load_battery", dummy_load_battery(ok))
+        batt = BatteryIcon()
+
+    widget = battery_manager(batt)
+    assert widget.eval("len(self.images)") == str(len(BatteryIcon.icon_names))
+
+    widget.eval(
+        "from libqtile import images\n"
+        "self._test_result = True\n"
+        "for img in self.images.values():\n"
+        "    if not isinstance(img, images.Img):\n"
+        "        self._test_result = False"
+    )
+    assert widget.eval("self._test_result") == "True"
+
+
+def test_battery_background(battery_manager, monkeypatch):
+    ok = BatteryStatus(
+        state=BatteryState.DISCHARGING,
+        percent=0.5,
         power=15.0,
         time=1729,
         charge_start_threshold=0,
@@ -280,94 +336,60 @@ def test_battery_background(fake_qtile, fake_window, monkeypatch):
     low_background = "ff0000"
     background = "000000"
 
-    with monkeypatch.context() as manager:
-        manager.setattr(battery, "load_battery", dummy_load_battery(ok))
+    with monkeypatch.context() as mp:
+        mp.setattr(battery, "load_battery", dummy_load_battery(ok))
         batt = Battery(low_percentage=0.2, low_background=low_background, background=background)
 
-    fakebar = FakeBar([batt], window=fake_window)
-    batt._configure(fake_qtile, fakebar)
+    widget = battery_manager(batt)
 
-    assert batt.background == background
-    batt._battery._status = low
-    batt.poll()
-    assert batt.background == low_background
-    batt._battery._status = ok
-    batt.poll()
-    assert batt.background == background
+    assert widget.eval("self.background") == background
+    set_battery_status(widget, "DISCHARGING", 0.1)
+    assert widget.eval("self.background") == low_background
+    set_battery_status(widget, "DISCHARGING", 0.5)
+    assert widget.eval("self.background") == background
 
 
-def test_charge_control(fake_qtile, fake_window, monkeypatch):
-    start = 0
-    end = 100
-
-    def save_battery_percentage(self, charge_start_threshold, charge_end_threshold):
-        nonlocal start
-        nonlocal end
-
-        start = charge_start_threshold
-        end = charge_end_threshold
-
-    with monkeypatch.context() as manager:
-        manager.setattr(
-            battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
-        )
-        batt = Battery(charge_controller=lambda: (5, 10))
-
-        fakebar = FakeBar([batt], window=fake_window)
-        batt._configure(fake_qtile, fakebar)
-        batt.poll()
-
-        assert start == 5
-        assert end == 10
+def save_battery_percentage(self, charge_start_threshold, charge_end_threshold):
+    self._test_thresholds = (charge_start_threshold, charge_end_threshold)
 
 
-def test_charge_control_disabled(fake_qtile, fake_window, monkeypatch):
-    start = 4
-    end = 7
-
-    def save_battery_percentage(self, charge_start_threshold, charge_end_threshold):
-        raise "should not be called"
-
-    with monkeypatch.context() as manager:
-        manager.setattr(
-            battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
-        )
-        batt = Battery(charge_controller=None)
-
-        fakebar = FakeBar([batt], window=fake_window)
-        batt._configure(fake_qtile, fakebar)
-        batt.poll()
-
-        assert start == 4
-        assert end == 7
+def polled_thresholds(widget):
+    """Poll the widget and return any thresholds set during the poll."""
+    widget.eval("self.poll()")
+    return widget.eval("getattr(self._battery, '_test_thresholds', None)")
 
 
-def test_charge_control_force_charge(fake_qtile, fake_window, monkeypatch):
-    start = 4
-    end = 7
+def test_charge_control(battery_manager, monkeypatch):
+    monkeypatch.setattr(
+        battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
+    )
+    batt = Battery(charge_controller=lambda: (5, 10))
 
-    def save_battery_percentage(self, charge_start_threshold, charge_end_threshold):
-        nonlocal start
-        nonlocal end
-
-        start = charge_start_threshold
-        end = charge_end_threshold
-
-    with monkeypatch.context() as manager:
-        manager.setattr(
-            battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
-        )
-        batt = Battery(charge_controller=lambda: (0, 90), force_charge=True)
-
-        fakebar = FakeBar([batt], window=fake_window)
-        batt._configure(fake_qtile, fakebar)
-        batt.poll()
-
-        assert start == 0
-        assert end == 100
+    widget = battery_manager(batt)
+    assert polled_thresholds(widget) == "(5, 10)"
 
 
-def test_charging_foreground(fake_qtile, fake_window, monkeypatch):
+def test_charge_control_disabled(battery_manager, monkeypatch):
+    monkeypatch.setattr(
+        battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
+    )
+    batt = Battery(charge_controller=None)
+
+    widget = battery_manager(batt)
+    assert polled_thresholds(widget) == "None"
+
+
+def test_charge_control_force_charge(battery_manager, monkeypatch):
+    monkeypatch.setattr(
+        battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
+    )
+    batt = Battery(charge_controller=lambda: (0, 90), force_charge=True)
+
+    widget = battery_manager(batt)
+    assert polled_thresholds(widget) == "(0, 100)"
+
+
+def test_charging_foreground(battery_manager, monkeypatch):
     foreground = "#dddddd"
     charging_foreground = "#00ff00"
     low_foreground = "#ff0000"
@@ -381,8 +403,8 @@ def test_charging_foreground(fake_qtile, fake_window, monkeypatch):
         charge_end_threshold=100,
     )
 
-    with monkeypatch.context() as manager:
-        manager.setattr(battery, "load_battery", dummy_load_battery(loaded_bat))
+    with monkeypatch.context() as mp:
+        mp.setattr(battery, "load_battery", dummy_load_battery(loaded_bat))
         batt = Battery(
             foreground=foreground,
             low_foreground=low_foreground,
@@ -390,13 +412,12 @@ def test_charging_foreground(fake_qtile, fake_window, monkeypatch):
             low_percentage=0.3,
         )
 
-        fakebar = FakeBar([batt], window=fake_window)
-        batt._configure(fake_qtile, fakebar)
-        batt.poll()
-        assert batt.layout.colour == charging_foreground
+    widget = battery_manager(batt)
+    widget.eval("self.poll()")
+    assert widget.eval("self.layout.colour") == charging_foreground
 
 
-def test_discharging_foreground(fake_qtile, fake_window, monkeypatch):
+def test_discharging_foreground(battery_manager, monkeypatch):
     foreground = "#dddddd"
     charging_foreground = "#00ff00"
     low_foreground = "#ff0000"
@@ -410,8 +431,8 @@ def test_discharging_foreground(fake_qtile, fake_window, monkeypatch):
         charge_end_threshold=100,
     )
 
-    with monkeypatch.context() as manager:
-        manager.setattr(battery, "load_battery", dummy_load_battery(loaded_bat))
+    with monkeypatch.context() as mp:
+        mp.setattr(battery, "load_battery", dummy_load_battery(loaded_bat))
         batt = Battery(
             foreground=foreground,
             low_foreground=low_foreground,
@@ -419,14 +440,12 @@ def test_discharging_foreground(fake_qtile, fake_window, monkeypatch):
             low_percentage=0.3,
         )
 
-        fakebar = FakeBar([batt], window=fake_window)
-        batt._configure(fake_qtile, fakebar)
-
-    batt.poll()
-    assert batt.layout.colour == foreground
+    widget = battery_manager(batt)
+    widget.eval("self.poll()")
+    assert widget.eval("self.layout.colour") == foreground
 
 
-def test_low_foreground(fake_qtile, fake_window, monkeypatch):
+def test_low_foreground(battery_manager, monkeypatch):
     foreground = "#dddddd"
     charging_foreground = "#00ff00"
     low_foreground = "#ff0000"
@@ -440,8 +459,8 @@ def test_low_foreground(fake_qtile, fake_window, monkeypatch):
         charge_end_threshold=100,
     )
 
-    with monkeypatch.context() as manager:
-        manager.setattr(battery, "load_battery", dummy_load_battery(loaded_bat))
+    with monkeypatch.context() as mp:
+        mp.setattr(battery, "load_battery", dummy_load_battery(loaded_bat))
         batt = Battery(
             foreground=foreground,
             low_foreground=low_foreground,
@@ -449,14 +468,12 @@ def test_low_foreground(fake_qtile, fake_window, monkeypatch):
             low_percentage=0.3,
         )
 
-        fakebar = FakeBar([batt], window=fake_window)
-        batt._configure(fake_qtile, fakebar)
-
-    batt.poll()
-    assert batt.layout.colour == low_foreground
+    widget = battery_manager(batt)
+    widget.eval("self.poll()")
+    assert widget.eval("self.layout.colour") == low_foreground
 
 
-def test_no_charging_foreground(fake_qtile, fake_window, monkeypatch):
+def test_no_charging_foreground(battery_manager, monkeypatch):
     foreground = "#dddddd"
     charging_foreground = None
     low_foreground = "#ff0000"
@@ -470,8 +487,8 @@ def test_no_charging_foreground(fake_qtile, fake_window, monkeypatch):
         charge_end_threshold=100,
     )
 
-    with monkeypatch.context() as manager:
-        manager.setattr(battery, "load_battery", dummy_load_battery(loaded_bat))
+    with monkeypatch.context() as mp:
+        mp.setattr(battery, "load_battery", dummy_load_battery(loaded_bat))
         batt = Battery(
             foreground=foreground,
             low_foreground=low_foreground,
@@ -479,8 +496,6 @@ def test_no_charging_foreground(fake_qtile, fake_window, monkeypatch):
             low_percentage=0.3,
         )
 
-        fakebar = FakeBar([batt], window=fake_window)
-        batt._configure(fake_qtile, fakebar)
-
-    batt.poll()
-    assert batt.layout.colour == foreground
+    widget = battery_manager(batt)
+    widget.eval("self.poll()")
+    assert widget.eval("self.layout.colour") == foreground

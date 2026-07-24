@@ -4,7 +4,9 @@ from types import ModuleType
 
 import pytest
 
-from test.widgets.conftest import FakeBar
+import libqtile.bar
+import libqtile.config
+from test.helpers import Retry
 
 
 class FakeIMAP(ModuleType):
@@ -35,6 +37,11 @@ class FakeKeyring(ModuleType):
         return None
 
 
+@Retry(ignore_exceptions=(AssertionError,))
+def wait_for_text(widget, text):
+    assert widget.info()["text"] == text
+
+
 @pytest.fixture()
 def patched_imap(monkeypatch):
     monkeypatch.delitem(sys.modules, "imaplib", raising=False)
@@ -47,29 +54,33 @@ def patched_imap(monkeypatch):
     yield imapwidget
 
 
-def test_imapwidget(fake_qtile, monkeypatch, fake_window, patched_imap):
-    imap = patched_imap.ImapWidget(user="qtile")
-    fakebar = FakeBar([imap], window=fake_window)
-    imap._configure(fake_qtile, fakebar)
-    text = imap.poll()
-    assert text == "INBOX: 2"
+@pytest.fixture
+def imap_manager(manager_nospawn, minimal_conf_noscreen, patched_imap):
+    def start(**kwargs):
+        widget = patched_imap.ImapWidget(**kwargs)
+
+        config = minimal_conf_noscreen
+        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
+        manager_nospawn.start(config)
+
+        return manager_nospawn.c.widget["imapwidget"]
+
+    return start
 
 
-def test_imapwidget_with_password(fake_qtile, monkeypatch, fake_window, patched_imap):
+def test_imapwidget(imap_manager):
+    widget = imap_manager(user="qtile")
+    wait_for_text(widget, "INBOX: 2")
+
+
+def test_imapwidget_with_password(patched_imap, imap_manager):
     # keyring should not be called
     patched_imap.keyring.valid = False
-    imap = patched_imap.ImapWidget(user="qtile", password="password")
-    fakebar = FakeBar([imap], window=fake_window)
-    imap._configure(fake_qtile, fakebar)
-    text = imap.poll()
-    assert text == "INBOX: 2"
+    widget = imap_manager(user="qtile", password="password")
+    wait_for_text(widget, "INBOX: 2")
 
 
-def test_imapwidget_password_none(fake_qtile, monkeypatch, fake_window, patched_imap):
+def test_imapwidget_password_none(patched_imap, imap_manager):
     patched_imap.keyring.valid = False
-
-    imap = patched_imap.ImapWidget(user="qtile")
-    fakebar = FakeBar([imap], window=fake_window)
-    imap._configure(fake_qtile, fakebar)
-    text = imap.poll()
-    assert text == "No password error"
+    widget = imap_manager(user="qtile")
+    wait_for_text(widget, "No password error")

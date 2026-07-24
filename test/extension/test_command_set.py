@@ -1,129 +1,121 @@
-import logging
+import os
+import time
 
 import pytest
 
+from libqtile.config import Key
 from libqtile.extension.command_set import CommandSet
-from libqtile.log_utils import init_log, logger
+from libqtile.lazy import lazy
+from test.helpers import Retry
+
+
+# Fake dmenu process: the "selection" is the first item offered, unless the
+# list of items starts with "missing" in which case something not in the
+# list is returned.
+class FakeDmenu:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def communicate(self, value_in, *args):
+        if value_in.startswith(b"missing"):
+            return [b"something_else", None]
+        return [value_in.split(b"\n")[0], None]
+
+
+@Retry(ignore_exceptions=(AssertionError,))
+def wait_for_file(path):
+    assert os.path.exists(str(path))
 
 
 @pytest.fixture
-def fake_qtile():
-    class FakeQtile:
-        def spawn(self, value):
-            logger.warning(value)
+def commandset_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+    def start(extension):
+        monkeypatch.setattr("libqtile.extension.base.Popen", FakeDmenu)
 
-    yield FakeQtile()
+        config = minimal_conf_noscreen
+        config.keys = [Key([], "a", lazy.run_extension(extension))]
+        manager_nospawn.start(config)
 
+        return manager_nospawn
 
-@pytest.fixture
-def log_extension_output(monkeypatch):
-    init_log()
-
-    def fake_popen(cmd, *args, **kwargs):
-        class PopenObj:
-            def communicate(self, value_in, *args):
-                if value_in.startswith(b"missing"):
-                    return [b"something_else", None]
-                else:
-                    return [value_in, None]
-
-        return PopenObj()
-
-    monkeypatch.setattr("libqtile.extension.base.Popen", fake_popen)
-
-    yield
+    return start
 
 
-@pytest.mark.usefixtures("log_extension_output")
-def test_command_set_valid_command(caplog, fake_qtile):
+def test_command_set_valid_command(tmpdir, commandset_manager):
     """Extension should run pre-commands and selected command."""
-    extension = CommandSet(pre_commands=["run pre-command"], commands={"key": "run testcommand"})
-    extension._configure(fake_qtile)
-    extension.run()
+    pre = tmpdir.join("pre")
+    cmd = tmpdir.join("cmd")
 
-    assert caplog.record_tuples == [
-        ("libqtile", logging.WARNING, "run pre-command"),
-        ("libqtile", logging.WARNING, "run testcommand"),
-    ]
+    extension = CommandSet(pre_commands=[f"touch {pre}"], commands={"key": f"touch {cmd}"})
+    manager = commandset_manager(extension)
+
+    manager.c.simulate_keypress([], "a")
+
+    wait_for_file(pre)
+    wait_for_file(cmd)
 
 
-@pytest.mark.usefixtures("log_extension_output")
-def test_command_set_invalid_command(caplog, fake_qtile):
+def test_command_set_invalid_command(tmpdir, commandset_manager):
     """Where the key is not in "commands", no command will be run."""
-    extension = CommandSet(
-        pre_commands=["run pre-command"], commands={"missing": "run testcommand"}
-    )
-    extension._configure(fake_qtile)
-    extension.run()
+    pre = tmpdir.join("pre")
+    cmd = tmpdir.join("cmd")
 
-    assert caplog.record_tuples == [("libqtile", logging.WARNING, "run pre-command")]
+    extension = CommandSet(pre_commands=[f"touch {pre}"], commands={"missing": f"touch {cmd}"})
+    manager = commandset_manager(extension)
+
+    manager.c.simulate_keypress([], "a")
+
+    wait_for_file(pre)
+    time.sleep(0.5)
+    assert not os.path.exists(str(cmd))
 
 
-@pytest.mark.usefixtures("log_extension_output")
-def test_command_set_inside_command_set_valid_command(caplog, fake_qtile):
+def test_command_set_inside_command_set_valid_command(tmpdir, commandset_manager):
     """Extension should run pre-commands and selected command."""
+    pre = tmpdir.join("pre")
+    inner_pre = tmpdir.join("inner_pre")
+    cmd = tmpdir.join("cmd")
 
     inside_command = CommandSet(
-        pre_commands=["run inner pre-command"],
-        commands={"key": "run testcommand"},
+        pre_commands=[f"touch {inner_pre}"],
+        commands={"key": f"touch {cmd}"},
     )
-    inside_command._configure(fake_qtile)
 
     extension = CommandSet(
-        pre_commands=["run pre-command"],
+        pre_commands=[f"touch {pre}"],
         commands={"key": inside_command},
     )
-    extension._configure(fake_qtile)
+    manager = commandset_manager(extension)
 
-    extension.run()
+    manager.c.simulate_keypress([], "a")
 
-    assert caplog.record_tuples == [
-        ("libqtile", logging.WARNING, "run pre-command"),
-        (
-            "libqtile",
-            logging.WARNING,
-            "run inner pre-command",
-        ),  # pre-command of the inside_command
-        ("libqtile", logging.WARNING, "run testcommand"),
-    ]
+    wait_for_file(pre)
+    wait_for_file(inner_pre)
+    wait_for_file(cmd)
 
 
-@pytest.mark.usefixtures("log_extension_output")
-def test_command_set_inside_command_set_invalid_command(caplog, fake_qtile):
+def test_command_set_inside_command_set_invalid_command(tmpdir, commandset_manager):
     """Where the key is not in "commands", no command will be run."""
-    inside_command = CommandSet(
-        pre_commands=["run inner pre-command"],
-        commands={"key": "run testcommand"},  # doesn't really matter what command
-    )
-    inside_command._configure(fake_qtile)
-
-    extension = CommandSet(pre_commands=["run pre-command"], commands={"missing": inside_command})
-    extension._configure(fake_qtile)
-    extension.run()
-
-    assert caplog.record_tuples == [("libqtile", logging.WARNING, "run pre-command")]
-
-    caplog.clear()
+    pre = tmpdir.join("pre")
+    inner_pre = tmpdir.join("inner_pre")
+    cmd = tmpdir.join("cmd")
 
     inside_command = CommandSet(
-        pre_commands=["run inner pre-command"],
-        commands={"missing": "run testcommand"},
+        pre_commands=[f"touch {inner_pre}"],
+        commands={"missing": f"touch {cmd}"},
     )
-    inside_command._configure(fake_qtile)
 
     extension = CommandSet(
-        pre_commands=["run pre-command"],
+        pre_commands=[f"touch {pre}"],
         commands={"key": inside_command},
     )
-    extension._configure(fake_qtile)
+    manager = commandset_manager(extension)
 
-    extension.run()
+    manager.c.simulate_keypress([], "a")
 
-    assert caplog.record_tuples == [
-        ("libqtile", logging.WARNING, "run pre-command"),
-        (
-            "libqtile",
-            logging.WARNING,
-            "run inner pre-command",
-        ),  # pre-command of the inside_command
-    ]
+    # The outer and inner pre-commands run but the inner selection does not
+    # match a command so nothing else is run
+    wait_for_file(pre)
+    wait_for_file(inner_pre)
+    time.sleep(0.5)
+    assert not os.path.exists(str(cmd))

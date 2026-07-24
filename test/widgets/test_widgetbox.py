@@ -2,54 +2,58 @@ import pytest
 
 import libqtile.config
 from libqtile.widget import Systray, TextBox, WidgetBox
-from test.widgets.conftest import FakeBar
 
 
-def test_widgetbox_widget(fake_qtile, fake_window):
+def test_widgetbox_widget(manager_nospawn, minimal_conf_noscreen):
     tb_one = TextBox(name="tb_one", text="TB ONE")
     tb_two = TextBox(name="tb_two", text="TB TWO")
 
     # Give widgetbox invalid value for button location
     widget_box = WidgetBox(widgets=[tb_one, tb_two], close_button_location="middle", fontsize=10)
 
-    # Create a bar and set attributes needed to run widget
-    fakebar = FakeBar([widget_box], window=fake_window)
+    config = minimal_conf_noscreen
+    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget_box], 10))]
 
-    # Configure the widget box
-    widget_box._configure(fake_qtile, fakebar)
+    manager_nospawn.start(config)
+
+    topbar = manager_nospawn.c.bar["top"]
+    box = manager_nospawn.c.widget["widgetbox"]
+
+    def bar_widgets():
+        return [w["name"] for w in topbar.info()["widgets"]]
 
     # Invalid value should be corrected to default
-    assert widget_box.close_button_location == "left"
+    assert box.eval("self.close_button_location") == "left"
 
     # Check only widget in bar is widgetbox
-    assert fakebar.widgets == [widget_box]
+    assert bar_widgets() == ["widgetbox"]
 
     # Open box
-    widget_box.toggle()
+    box.toggle()
 
     # Check it's open
-    assert widget_box.box_is_open
+    assert box.eval("self.box_is_open") == "True"
 
     # Default text position is left
-    assert fakebar.widgets == [widget_box, tb_one, tb_two]
+    assert bar_widgets() == ["widgetbox", "tb_one", "tb_two"]
 
     # Close box
-    widget_box.toggle()
+    box.toggle()
 
     # Check it's closed
-    assert not widget_box.box_is_open
+    assert box.eval("self.box_is_open") == "False"
 
     # Check widgets have been removed
-    assert fakebar.widgets == [widget_box]
+    assert bar_widgets() == ["widgetbox"]
 
     # Move button to right-hand side
-    widget_box.close_button_location = "right"
+    box.eval("self.close_button_location = 'right'")
 
     # Re-open box with new layout
-    widget_box.toggle()
+    box.toggle()
 
     # Now widgetbox is on the right
-    assert fakebar.widgets == [tb_one, tb_two, widget_box]
+    assert bar_widgets() == ["tb_one", "tb_two", "widgetbox"]
 
 
 def test_widgetbox_start_opened(manager_nospawn, minimal_conf_noscreen):

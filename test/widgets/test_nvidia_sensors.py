@@ -1,7 +1,9 @@
 import pytest
 
+import libqtile.bar
+import libqtile.config
 from libqtile.widget.nvidia_sensors import NvidiaSensors, _all_sensors_names_correct
-from test.widgets.conftest import FakeBar
+from test.helpers import Retry
 
 
 def test_nvidia_sensors_input_regex():
@@ -14,38 +16,49 @@ def test_nvidia_sensors_input_regex():
     assert not _all_sensors_names_correct(incorrect_sensors)
 
 
-class MockNvidiaSMI:
-    # nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader
-    # outputs one number for temperature with one gpu.
-    temperature = "20"
+@Retry(ignore_exceptions=(AssertionError,))
+def wait_for_temperature(widget, temperature):
+    assert widget.info()["text"] == temperature
 
-    @classmethod
-    def get_temperature(cls, *args, **kwargs):
-        return cls.temperature
+
+def set_temperature(widget, temperature):
+    """Change the mocked nvidia-smi output and repoll the widget."""
+    widget.eval(
+        f"self.call_process = lambda *args, **kwargs: '{temperature}'\nself.update(self.poll())"
+    )
 
 
 @pytest.fixture
-def fake_nvidia(fake_qtile, monkeypatch, fake_window):
-    n = NvidiaSensors()
+def nvidia_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+    widget = NvidiaSensors()
     # Replace internal call_process since we cant rely
     # on the test computer having the required hardware.
-    monkeypatch.setattr(n, "call_process", MockNvidiaSMI.get_temperature)
-    fakebar = FakeBar([n], window=fake_window)
-    n._configure(fake_qtile, fakebar)
-    return n
+    monkeypatch.setattr(widget, "call_process", lambda *args, **kwargs: "20")
+
+    config = minimal_conf_noscreen
+    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
+    manager_nospawn.start(config)
+
+    yield manager_nospawn.c.widget["nvidiasensors"]
 
 
-def test_nvidia_sensors_foreground_colour(fake_nvidia):
+def test_nvidia_sensors_foreground_colour(nvidia_manager):
     # Initial temperature
-    fake_nvidia.poll()
-    assert fake_nvidia.layout.colour == fake_nvidia.foreground_normal
+    wait_for_temperature(nvidia_manager, "20°C")
+    assert nvidia_manager.eval("self.layout.colour") == nvidia_manager.eval(
+        "self.foreground_normal"
+    )
 
     # Simulate GPU overheating
-    MockNvidiaSMI.temperature = "90"
-    fake_nvidia.poll()
-    assert fake_nvidia.layout.colour == fake_nvidia.foreground_alert
+    set_temperature(nvidia_manager, 90)
+    wait_for_temperature(nvidia_manager, "90°C")
+    assert nvidia_manager.eval("self.layout.colour") == nvidia_manager.eval(
+        "self.foreground_alert"
+    )
 
     # And cooling back down
-    MockNvidiaSMI.temperature = "20"
-    fake_nvidia.poll()
-    assert fake_nvidia.layout.colour == fake_nvidia.foreground_normal
+    set_temperature(nvidia_manager, 20)
+    wait_for_temperature(nvidia_manager, "20°C")
+    assert nvidia_manager.eval("self.layout.colour") == nvidia_manager.eval(
+        "self.foreground_normal"
+    )

@@ -4,7 +4,8 @@ from types import ModuleType
 
 import pytest
 
-from test.widgets.conftest import FakeBar
+import libqtile.bar
+import libqtile.config
 
 
 # Net widget only needs bytes_recv/sent attributes
@@ -29,11 +30,11 @@ class MockPsutil(ModuleType):
         return IOCounters(cls.up, cls.down)
 
 
-# Patch the widget with our mock psutil module.
-# Wrap widget so tests can pass keyword arguments.
+# Patch the widget with our mock psutil module and run it in a real manager.
+# Wrap the manager start so tests can pass keyword arguments to the widget.
 @pytest.fixture
-def patch_net(fake_qtile, monkeypatch, fake_window):
-    def build_widget(**kwargs):
+def net_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+    def start(**kwargs):
         MockPsutil.up = 0
         MockPsutil.down = 0
         monkeypatch.setitem(sys.modules, "psutil", MockPsutil("psutil"))
@@ -47,66 +48,90 @@ def patch_net(fake_qtile, monkeypatch, fake_window):
             "{total_suffix} {total_cumulative}{total_cumulative_suffix}",
             **kwargs,
         )
-        fakebar = FakeBar([widget], window=fake_window)
-        widget._configure(fake_qtile, fakebar)
 
-        return widget
+        config = minimal_conf_noscreen
+        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
+        manager_nospawn.start(config)
 
-    return build_widget
+        return manager_nospawn
+
+    return start
 
 
-def test_net_defaults(patch_net):
+def poll_text(manager):
+    """Reset the mocked counters and poll the widget once.
+
+    This is done in a single `eval` call so the widget's own timer cannot
+    fire between the reset and the poll.
+    """
+    widget = manager.c.widget["net"]
+    widget.eval(
+        "import psutil\n"
+        "type(psutil).up = 0\n"
+        "type(psutil).down = 0\n"
+        "self.stats = self.get_stats()\n"
+        "self._test_text = self.poll()"
+    )
+    return widget.eval("self._test_text")
+
+
+def test_net_defaults(net_manager):
     """Default: widget shows `all` interfaces"""
-    net1 = patch_net()
-    assert net1.poll() == "all: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
+    manager = net_manager()
+    assert poll_text(manager) == "all: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
 
 
-def test_net_single_interface(patch_net):
+def test_net_single_interface(net_manager):
     """Display single named interface"""
-    net2 = patch_net(interface="wlp58s0")
-    assert net2.poll() == "wlp58s0: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
+    manager = net_manager(interface="wlp58s0")
+    assert poll_text(manager) == "wlp58s0: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
 
 
-def test_net_list_interface(patch_net):
+def test_net_list_interface(net_manager):
     """Display multiple named interfaces"""
-    net2 = patch_net(interface=["wlp58s0", "lo"])
-    assert net2.poll() == (
+    manager = net_manager(interface=["wlp58s0", "lo"])
+    assert poll_text(manager) == (
         "wlp58s0: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB "
         "lo: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
     )
 
 
-def test_net_invalid_interface(patch_net):
+def test_net_invalid_interface():
     """Pass an invalid interface value"""
+    from libqtile.widget import net
+
     with pytest.raises(AttributeError):
-        _ = patch_net(interface=12)
+        _ = net.Net(interface=12)
 
 
-def test_net_use_bits(patch_net):
+def test_net_use_bits(net_manager):
     """Display all interfaces in bits rather than bytes"""
-    net4 = patch_net(use_bits=True)
-    assert net4.poll() == "all: U 320.0kb 640.0kb D 9.6Mb 19.2Mb T 9.92Mb 19.84Mb"
+    manager = net_manager(use_bits=True)
+    assert poll_text(manager) == "all: U 320.0kb 640.0kb D 9.6Mb 19.2Mb T 9.92Mb 19.84Mb"
 
 
-def test_net_convert_zero_b(patch_net):
+def test_net_convert_zero_b(net_manager):
     """Zero bytes is a special case in `convert_b`"""
-    net5 = patch_net()
-    assert net5.convert_b(0.0) == (0.0, "B")
+    manager = net_manager()
+    assert manager.c.widget["net"].eval("self.convert_b(0.0)") == "(0.0, 'B')"
 
 
-def test_net_use_prefix(patch_net):
+def test_net_use_prefix(net_manager):
     """Tests `prefix` configurable option"""
-    net6 = patch_net(prefix="M")
-    assert net6.poll() == "all: U 0.04MB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
+    manager = net_manager(prefix="M")
+    assert poll_text(manager) == "all: U 0.04MB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
 
 
-def test_net_missing_interface(patch_net):
+def test_net_missing_interface(net_manager):
     """Tests `missing_interface` option"""
-    net7 = patch_net(interface="unknown_interface")
-    assert net7.poll() == "unknown_interface not found"
+    manager = net_manager(interface="unknown_interface")
+    assert poll_text(manager) == "unknown_interface not found"
 
-    net8 = patch_net(interface="unknown_interface", missing_interface="")
-    assert net8.poll() == ""
+
+def test_net_missing_interface_custom_string(net_manager):
+    """Tests `missing_interface` option with custom string"""
+    manager = net_manager(interface="unknown_interface", missing_interface="")
+    assert poll_text(manager) == ""
 
 
 # Untested: 128-129 - generic exception catching

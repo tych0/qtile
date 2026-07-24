@@ -1,9 +1,16 @@
-import cairocffi
 import pytest
 
-from libqtile import bar, images
+import libqtile.bar
+import libqtile.config
+from libqtile import images
 from libqtile.widget import Volume
-from test.widgets.conftest import TEST_DIR, FakeBar
+from test.helpers import Retry
+from test.widgets.conftest import TEST_DIR
+
+
+@Retry(ignore_exceptions=(AssertionError,))
+def wait_for_colour(widget, colour):
+    assert widget.eval("self.layout.colour") == colour
 
 
 def test_images_fail():
@@ -12,7 +19,7 @@ def test_images_fail():
         vol.setup_images()
 
 
-def test_images_good(tmpdir, fake_bar, svg_img_as_pypath):
+def test_images_good(tmpdir, svg_img_as_pypath, manager_nospawn, minimal_conf_noscreen):
     names = (
         "audio-volume-high.svg",
         "audio-volume-low.svg",
@@ -23,14 +30,28 @@ def test_images_good(tmpdir, fake_bar, svg_img_as_pypath):
         target = tmpdir.join(name)
         svg_img_as_pypath.copy(target)
 
-    vol = Volume(theme_path=str(tmpdir))
-    vol.bar = fake_bar
-    vol.length_type = bar.STATIC
-    vol.length = 0
-    vol.setup_images()
-    assert len(vol.images) == len(names)
-    for name, image in vol.images.items():
-        assert isinstance(image.pattern, cairocffi.SurfacePattern)
+    vol = Volume(theme_path=str(tmpdir), get_volume_command="echo '50%'")
+
+    config = minimal_conf_noscreen
+    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([vol], 10))]
+    manager_nospawn.start(config)
+
+    widget = manager_nospawn.c.widget["volume"]
+
+    @Retry(ignore_exceptions=(AssertionError,))
+    def wait_for_images():
+        assert widget.eval("len(self.images)") == str(len(names))
+
+    wait_for_images()
+
+    widget.eval(
+        "import cairocffi\n"
+        "self._test_result = True\n"
+        "for image in self.images.values():\n"
+        "    if not isinstance(image.pattern, cairocffi.SurfacePattern):\n"
+        "        self._test_result = False"
+    )
+    assert widget.eval("self._test_result") == "True"
 
 
 def test_emoji():
@@ -81,23 +102,37 @@ def test_formats():
     assert vol.text == "Volume: 50% M"
 
 
-def test_foregrounds(fake_qtile, fake_window):
+def test_foregrounds(tmpdir, manager_nospawn, minimal_conf_noscreen):
     foreground = "#dddddd"
-    mute_foreground = None
+    mute_foreground = "#888888"
 
-    vol = Volume(foreground=foreground, mute_foreground=mute_foreground)
-    fakebar = FakeBar([vol], window=fake_window)
-    vol._configure(fake_qtile, fakebar)
+    # The widget's volume and mute state are read with real shell commands
+    # whose output we control through these files.
+    volume_file = tmpdir.join("volume")
+    mute_file = tmpdir.join("mute")
+    volume_file.write("50%")
+    mute_file.write("[on]")
 
-    vol.volume = 50
-    vol._update_drawer()
-    assert vol.layout.colour == foreground
+    vol = Volume(
+        foreground=foreground,
+        mute_foreground=None,
+        get_volume_command=f"cat {volume_file}",
+        check_mute_command=f"cat {mute_file}",
+    )
 
-    vol.mute_foreground = mute_foreground = "#888888"
-    vol.is_mute = False
-    vol._update_drawer()
-    assert vol.layout.colour == foreground
+    config = minimal_conf_noscreen
+    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([vol], 10))]
+    manager_nospawn.start(config)
 
-    vol.is_mute = True
-    vol._update_drawer()
-    assert vol.layout.colour == mute_foreground
+    widget = manager_nospawn.c.widget["volume"]
+
+    # Unmuted, no mute_foreground set: use foreground
+    wait_for_colour(widget, foreground)
+
+    # Setting mute_foreground doesn't change the colour while unmuted
+    widget.eval(f"self.mute_foreground = '{mute_foreground}'")
+    wait_for_colour(widget, foreground)
+
+    # Muting the volume changes the colour to mute_foreground
+    mute_file.write("[off]")
+    wait_for_colour(widget, mute_foreground)

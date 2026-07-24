@@ -1,7 +1,6 @@
 import pytest
 
 import libqtile
-from libqtile.backend.base import drawer
 from test.helpers import BareConfig, TestManager
 
 
@@ -92,24 +91,6 @@ def manager(request, manager_nospawn):
 
     manager_nospawn.start(config)
     yield manager_nospawn
-
-
-@pytest.fixture(scope="function")
-def fake_window():
-    """
-    A fake window that can provide a fake drawer to test widgets.
-    """
-
-    class FakeWindow:
-        class _NestedWindow:
-            wid = 10
-
-        window = _NestedWindow()
-
-        def create_drawer(self, width, height):
-            return drawer.Drawer(self, width, height)
-
-    return FakeWindow()
 
 
 @pytest.fixture

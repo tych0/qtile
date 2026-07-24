@@ -1,102 +1,105 @@
-from importlib import reload
-
 import pytest
 
-from test.widgets.conftest import FakeBar
+import libqtile.bar
+import libqtile.config
+from libqtile.widget.keyboardkbdd import KeyboardKbdd
+from test.helpers import Retry
 
 
 async def mock_signal_receiver(*args, **kwargs):
     return True
 
 
-class MockSpawn:
-    call_count = 0
-
-    @classmethod
-    def call_process(cls, *args, **kwargs):
-        if cls.call_count == 0:
-            cls.call_count += 1
-            return ""
-        return "kbdd"
+@Retry(ignore_exceptions=(AssertionError,))
+def wait_for_text(widget, text):
+    assert widget.info()["text"] == text
 
 
-class MockMessage:
-    def __init__(self, is_signal=True, body=0):
-        self.message_type = 1 if is_signal else 0
-        self.body = [body]
+def send_signal(widget, body):
+    """Simulate the dbus 'layoutChanged' signal."""
+    widget.eval(
+        "from types import SimpleNamespace\n"
+        f"self._signal_received(SimpleNamespace(message_type=1, body=[{body}]))"
+    )
 
 
 @pytest.fixture
-def patched_widget(monkeypatch):
-    from libqtile.widget import keyboardkbdd
+def kbdd_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+    def start(running, **kwargs):
+        # The widget calls `ps` to check whether kbdd is running. Fake the
+        # output so the tests don't rely on the state of the host: the
+        # output is read from a class attribute which tests can update via
+        # `eval` calls in the qtile process.
+        monkeypatch.setattr(
+            "libqtile.widget.keyboardkbdd.KeyboardKbdd._mock_ps_output",
+            "kbdd" if running else "",
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "libqtile.widget.keyboardkbdd.KeyboardKbdd.call_process",
+            lambda self, *args, **kw: self._mock_ps_output,
+        )
+        monkeypatch.setattr(
+            "libqtile.widget.keyboardkbdd.add_signal_receiver", mock_signal_receiver
+        )
 
-    reload(keyboardkbdd)
+        widget = KeyboardKbdd(configured_keyboards=["gb", "us"], **kwargs)
 
-    # The next line shouldn't be necessary but I got occasional failures without it when testing locally
-    monkeypatch.setattr(
-        "libqtile.widget.keyboardkbdd.KeyboardKbdd.call_process", MockSpawn.call_process
-    )
-    monkeypatch.setattr("libqtile.widget.keyboardkbdd.add_signal_receiver", mock_signal_receiver)
-    return keyboardkbdd
+        config = minimal_conf_noscreen
+        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
+        manager_nospawn.start(config)
 
+        return manager_nospawn.c.widget["keyboardkbdd"]
 
-def test_keyboardkbdd_process_running(fake_qtile, patched_widget, fake_window):
-    MockSpawn.call_count = 1
-    kbd = patched_widget.KeyboardKbdd(configured_keyboards=["gb", "us"])
-    fakebar = FakeBar([kbd], window=fake_window)
-    kbd._configure(fake_qtile, fakebar)
-    assert kbd.is_kbdd_running
-    assert kbd.keyboard == "gb"
-
-    # Create a message with the index of the active keyboard
-    message = MockMessage(body=1)
-    kbd._signal_received(message)
-    assert kbd.keyboard == "us"
+    return start
 
 
-def test_keyboardkbdd_process_not_running(fake_qtile, patched_widget, fake_window):
-    MockSpawn.call_count = 0
-    kbd = patched_widget.KeyboardKbdd(configured_keyboards=["gb", "us"])
-    fakebar = FakeBar([kbd], window=fake_window)
-    kbd._configure(fake_qtile, fakebar)
-    assert not kbd.is_kbdd_running
-    assert kbd.keyboard == "N/A"
+def test_keyboardkbdd_process_running(kbdd_manager):
+    widget = kbdd_manager(running=True)
 
-    # Second call of _check_kbdd will confirm process running
-    # so widget should now show layout
-    kbd.poll()
-    assert kbd.keyboard == "gb"
+    assert widget.eval("self.is_kbdd_running") == "True"
+    wait_for_text(widget, "gb")
+
+    # Send a signal with the index of the active keyboard
+    send_signal(widget, body=1)
+    wait_for_text(widget, "us")
+
+
+def test_keyboardkbdd_process_not_running(kbdd_manager):
+    widget = kbdd_manager(running=False)
+
+    assert widget.eval("self.is_kbdd_running") == "False"
+    wait_for_text(widget, "N/A")
+
+    # Once kbdd is running, the next poll will confirm this
+    # so widget should now show the layout
+    widget.eval("type(self)._mock_ps_output = 'kbdd'")
+    wait_for_text(widget, "gb")
+    assert widget.eval("self.is_kbdd_running") == "True"
 
 
 # Custom colours are not set until a signal is received
 # TO DO: This should be fixed so the colour is set on __init__
-def test_keyboard_kbdd_colours(fake_qtile, patched_widget, fake_window):
-    MockSpawn.call_count = 1
-    kbd = patched_widget.KeyboardKbdd(
-        configured_keyboards=["gb", "us"], colours=["#ff0000", "#00ff00"]
-    )
-    fakebar = FakeBar([kbd], window=fake_window)
-    kbd._configure(fake_qtile, fakebar)
+def test_keyboard_kbdd_colours(kbdd_manager):
+    widget = kbdd_manager(running=True, colours=["#ff0000", "#00ff00"])
 
-    # Create a message with the index of the active keyboard
-    message = MockMessage(body=0)
-    kbd._signal_received(message)
-    assert kbd.layout.colour == "#ff0000"
+    # Send a signal with the index of the active keyboard
+    send_signal(widget, body=0)
+    assert widget.eval("self.layout.colour") == "#ff0000"
 
-    # Create a message with the index of the active keyboard
-    message = MockMessage(body=1)
-    kbd._signal_received(message)
-    assert kbd.layout.colour == "#00ff00"
+    # Send a signal with the index of the active keyboard
+    send_signal(widget, body=1)
+    assert widget.eval("self.layout.colour") == "#00ff00"
 
     # No change where self.colours is a string
-    kbd.colours = "#ffff00"
-    kbd._set_colour(1)
-    assert kbd.layout.colour == "#00ff00"
+    widget.eval("self.colours = '#ffff00'")
+    widget.eval("self._set_colour(1)")
+    assert widget.eval("self.layout.colour") == "#00ff00"
 
     # Colours list is shorter than length of layouts
-    kbd.colours = ["#ff00ff"]
+    widget.eval("self.colours = ['#ff00ff']")
 
-    # Should pick second item in colours list but it doesn't exit
+    # Should pick second item in colours list but it doesn't exist
     # so widget looks for previous item
-    kbd._set_colour(1)
-    assert kbd.layout.colour == "#ff00ff"
+    widget.eval("self._set_colour(1)")
+    assert widget.eval("self.layout.colour") == "#ff00ff"

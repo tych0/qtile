@@ -1,11 +1,9 @@
 import pytest
 
 import libqtile.confreader
-from libqtile import hook
 from libqtile.config import Key, KeyChord
 from libqtile.lazy import lazy
 from libqtile.widget import Chord, base
-from test.widgets.conftest import FakeBar
 
 RED = "#FF0000"
 BLUE = "#00FF00"
@@ -40,62 +38,71 @@ class ChordConf(libqtile.confreader.Config):
             name="mode_true",
             mode=True,
         ),
+        KeyChord(
+            [],
+            "c",
+            [
+                Key([], "b", lazy.function(no_op)),
+            ],
+            name="testcolor",
+        ),
+        KeyChord(
+            [],
+            "v",
+            [
+                Key([], "b", lazy.function(no_op)),
+            ],
+            name="test",
+        ),
     ]
     mouse = []
     groups = [libqtile.config.Group("a"), libqtile.config.Group("b")]
     layouts = [libqtile.layout.stack.Stack(num_stacks=1)]
     floating_layout = libqtile.resources.default_config.floating_layout
-    screens = [libqtile.config.Screen(top=libqtile.bar.Bar([Chord()], 10))]
+    screens = [
+        libqtile.config.Screen(
+            top=libqtile.bar.Bar([Chord(chords_colors={"testcolor": (RED, BLUE)})], 10)
+        )
+    ]
 
 
 chord_config = pytest.mark.parametrize("manager", [ChordConf], indirect=True)
 
 
-def test_chord_widget(fake_window, fake_qtile):
-    chord = Chord(chords_colors={"testcolor": (RED, BLUE)})
-    fakebar = FakeBar([chord], window=fake_window)
-    chord._configure(fake_qtile, fakebar)
+@chord_config
+def test_chord_widget(manager):
+    widget = manager.c.widget["chord"]
+
+    def colours():
+        return (widget.eval("self.background"), widget.eval("self.layout.colour"))
 
     # Text is blank at start
-    assert chord.text == ""
+    assert widget.info()["text"] == ""
 
-    # Fire hook for testcolor chord
-    hook.fire("enter_chord", "testcolor")
+    # Enter the "testcolor" chord
+    manager.c.simulate_keypress([], "c")
 
     # Chord is in chords_colors so check colours
-    assert chord.background == RED
-    assert chord.layout.colour == BLUE
-    assert chord.text == "testcolor"
+    assert widget.info()["text"] == "testcolor"
+    assert colours() == (RED, BLUE)
 
-    # New chord, not in dictionary so should be default colours
-    hook.fire("enter_chord", "test")
-    assert chord.text == "test"
-    assert chord.background == BASE_BACKGROUND
-    assert chord.layout.colour == BASE_FOREGROUND
-
-    # Unnamed chord so no text
-    hook.fire("enter_chord", "")
-    assert chord.text == ""
-    assert chord.background == BASE_BACKGROUND
-    assert chord.layout.colour == BASE_FOREGROUND
+    # Escape and enter new chord which is not in
+    # chords_colors so should be default colours
+    manager.c.simulate_keypress([], "Escape")
+    manager.c.simulate_keypress([], "v")
+    assert widget.info()["text"] == "test"
+    assert colours() == (str(BASE_BACKGROUND), str(BASE_FOREGROUND))
 
     # Back into testcolor and custom colours
-    hook.fire("enter_chord", "testcolor")
-    assert chord.background == RED
-    assert chord.layout.colour == BLUE
-    assert chord.text == "testcolor"
+    manager.c.simulate_keypress([], "Escape")
+    manager.c.simulate_keypress([], "c")
+    assert widget.info()["text"] == "testcolor"
+    assert colours() == (RED, BLUE)
 
-    # Colours shoud reset when leaving chord
-    hook.fire("leave_chord")
-    assert chord.text == ""
-    assert chord.background == BASE_BACKGROUND
-    assert chord.layout.colour == BASE_FOREGROUND
-
-    # Finalize the widget to prevent segfault (the drawer needs to be finalised)
-    # We clear the _futures attribute as there are no real timers in it and calls
-    # to `cancel()` them will fail.
-    chord._futures = []
-    chord.finalize()
+    # Colours should reset when leaving chord
+    manager.c.simulate_keypress([], "Escape")
+    assert widget.info()["text"] == ""
+    assert colours() == (str(BASE_BACKGROUND), str(BASE_FOREGROUND))
 
 
 @chord_config

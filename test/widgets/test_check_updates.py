@@ -1,6 +1,8 @@
+import pytest
+
 import libqtile.config
-from libqtile.widget.check_updates import CheckUpdates, Popen  # noqa: F401
-from test.widgets.conftest import FakeBar
+from libqtile.widget.check_updates import CheckUpdates
+from test.helpers import Retry
 
 wrong_distro = "Barch"
 good_distro = "Arch"
@@ -10,29 +12,27 @@ cmd_error = "false"
 nus = "No Update Available"
 
 
-# This class returns None when first polled (to simulate that the task is still running)
-# and then 0 on the second call.
-class MockPopen:
-    def __init__(self, *args, **kwargs):
-        self.call_count = 0
-
-    def poll(self):
-        if self.call_count == 0:
-            self.call_count += 1
-            return None
-        return 0
+@Retry(ignore_exceptions=(AssertionError,))
+def wait_for_text(widget, text):
+    assert widget.info()["text"] == text
 
 
-# Bit of an ugly hack to replicate the above functionality but for a method.
-class MockSpawn:
-    call_count = 0
+@pytest.fixture
+def checkupdates_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+    def start(widget=None, patches=None, **kwargs):
+        if widget is None:
+            widget = CheckUpdates(**kwargs)
 
-    @classmethod
-    def call_process(cls, *args, **kwargs):
-        if cls.call_count == 0:
-            cls.call_count += 1
-            return "Updates"
-        return ""
+        for target, value in (patches or {}).items():
+            monkeypatch.setattr(target, value)
+
+        config = minimal_conf_noscreen
+        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
+        manager_nospawn.start(config)
+
+        return manager_nospawn
+
+    return start
 
 
 def test_unknown_distro():
@@ -42,57 +42,58 @@ def test_unknown_distro():
     assert text == "N/A"
 
 
-def test_update_available(fake_qtile, fake_window):
+def test_update_available(checkupdates_manager):
     """test output with update (check number of updates and color)"""
-    cu2 = CheckUpdates(
+    manager = checkupdates_manager(
         distro=good_distro, custom_command=cmd_1_line, colour_have_updates="#123456"
     )
-    fakebar = FakeBar([cu2], window=fake_window)
-    cu2._configure(fake_qtile, fakebar)
-    text = cu2.poll()
-    assert text == "Updates: 1"
-    assert cu2.layout.colour == cu2.colour_have_updates
+    widget = manager.c.widget["checkupdates"]
+    wait_for_text(widget, "Updates: 1")
+    assert widget.eval("self.layout.colour") == widget.eval("self.colour_have_updates")
 
 
-def test_no_update_available_without_no_update_string(fake_qtile, fake_window):
+def test_no_update_available_without_no_update_string(checkupdates_manager):
     """test output with no update (without dedicated string nor color)"""
-    cu3 = CheckUpdates(distro=good_distro, custom_command=cmd_0_line)
-    fakebar = FakeBar([cu3], window=fake_window)
-    cu3._configure(fake_qtile, fakebar)
-    text = cu3.poll()
-    assert text == ""
+    manager = checkupdates_manager(distro=good_distro, custom_command=cmd_0_line)
+    widget = manager.c.widget["checkupdates"]
+    wait_for_text(widget, "")
 
 
-def test_no_update_available_with_no_update_string_and_color_no_updates(fake_qtile, fake_window):
+def test_no_update_available_with_no_update_string_and_color_no_updates(checkupdates_manager):
     """test output with no update (with dedicated string and color)"""
-    cu4 = CheckUpdates(
+    manager = checkupdates_manager(
         distro=good_distro,
         custom_command=cmd_0_line,
         no_update_string=nus,
         colour_no_updates="#654321",
     )
-    fakebar = FakeBar([cu4], window=fake_window)
-    cu4._configure(fake_qtile, fakebar)
-    text = cu4.poll()
-    assert text == nus
-    assert cu4.layout.colour == cu4.colour_no_updates
+    widget = manager.c.widget["checkupdates"]
+    wait_for_text(widget, nus)
+    assert widget.eval("self.layout.colour") == widget.eval("self.colour_no_updates")
 
 
-def test_update_available_with_restart_indicator(monkeypatch, fake_qtile, fake_window):
-    """test output with no indicator where restart needed"""
-    cu5 = CheckUpdates(
+def test_update_available_with_restart_indicator(checkupdates_manager):
+    """test output with an indicator where restart needed"""
+    manager = checkupdates_manager(
         distro=good_distro,
         custom_command=cmd_1_line,
         restart_indicator="*",
     )
-    monkeypatch.setattr("os.path.exists", lambda x: True)
-    fakebar = FakeBar([cu5], window=fake_window)
-    cu5._configure(fake_qtile, fakebar)
-    text = cu5.poll()
-    assert text == "Updates: 1*"
+    widget = manager.c.widget["checkupdates"]
+
+    # Patch os.path.exists inside a single `eval` call so the widget's own
+    # timer never sees the patched version.
+    widget.eval(
+        "import os.path\n"
+        "old_exists = os.path.exists\n"
+        "os.path.exists = lambda x: True\n"
+        "self._test_text = self.poll()\n"
+        "os.path.exists = old_exists"
+    )
+    assert widget.eval("self._test_text") == "Updates: 1*"
 
 
-def test_update_available_with_execute(manager_nospawn, minimal_conf_noscreen, monkeypatch):
+def test_update_available_with_execute(checkupdates_manager):
     """test polling after executing command"""
 
     # Use monkeypatching to patch both Popen (for execute command) and call_process
@@ -127,41 +128,37 @@ def test_update_available_with_execute(manager_nospawn, minimal_conf_noscreen, m
         no_update_string=nus,
     )
 
-    # Patch the necessary object
-    monkeypatch.setattr(cu6, "call_process", MockSpawn.call_process)
-    monkeypatch.setattr("libqtile.widget.check_updates.Popen", MockPopen)
+    manager = checkupdates_manager(
+        widget=cu6,
+        patches={
+            "libqtile.widget.check_updates.Popen": MockPopen,
+            "libqtile.widget.check_updates.CheckUpdates.call_process": MockSpawn.call_process,
+        },
+    )
+    widget = manager.c.widget["checkupdates"]
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([cu6], 10))]
-
-    manager_nospawn.start(config)
-
-    topbar = manager_nospawn.c.bar["top"]
-
-    assert topbar.info()["widgets"][0]["text"] == "Updates: 1"
+    wait_for_text(widget, "Updates: 1")
 
     # Clicking the widget triggers the execute command
-    topbar.fake_button_press(0, 0, button=1)
+    manager.c.bar["top"].fake_button_press(0, 0, button=1)
 
     # The second time we poll the widget, the update process is complete
     # and there are no more updates
-    assert manager_nospawn.c.widget["checkupdates"].eval("self.poll()") == nus
+    assert widget.eval("self.poll()") == nus
 
 
-def test_update_process_error(fake_qtile, fake_window):
+def test_update_process_error(checkupdates_manager):
     """test output where update check gives error"""
-    cu7 = CheckUpdates(
+    manager = checkupdates_manager(
         distro=good_distro,
         custom_command=cmd_error,
         no_update_string="ERROR",
     )
-    fakebar = FakeBar([cu7], window=fake_window)
-    cu7._configure(fake_qtile, fakebar)
-    text = cu7.poll()
-    assert text == "ERROR"
+    widget = manager.c.widget["checkupdates"]
+    wait_for_text(widget, "ERROR")
 
 
-def test_line_truncations(fake_qtile, monkeypatch, fake_window):
+def test_line_truncations(checkupdates_manager):
     """test update count is reduced"""
 
     # Mock output to return 5 lines of text
@@ -171,10 +168,11 @@ def test_line_truncations(fake_qtile, monkeypatch, fake_window):
     # Fedora is set up to remove 1 from line count
     cu8 = CheckUpdates(distro="Fedora")
 
-    monkeypatch.setattr(cu8, "call_process", mock_process)
-    fakebar = FakeBar([cu8], window=fake_window)
-    cu8._configure(fake_qtile, fakebar)
-    text = cu8.poll()
+    manager = checkupdates_manager(
+        widget=cu8,
+        patches={"libqtile.widget.check_updates.CheckUpdates.call_process": mock_process},
+    )
+    widget = manager.c.widget["checkupdates"]
 
     # Should have 4 updates
-    assert text == "Updates: 4"
+    wait_for_text(widget, "Updates: 4")
