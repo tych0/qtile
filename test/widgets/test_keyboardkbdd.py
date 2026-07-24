@@ -1,18 +1,11 @@
 import pytest
 
-import libqtile.bar
-import libqtile.config
 from libqtile.widget.keyboardkbdd import KeyboardKbdd
-from test.helpers import Retry
+from test.widgets.conftest import wait_for_text
 
 
 async def mock_signal_receiver(*args, **kwargs):
     return True
-
-
-@Retry(ignore_exceptions=(AssertionError,))
-def wait_for_text(widget, text):
-    assert widget.info()["text"] == text
 
 
 def send_signal(widget, body):
@@ -24,7 +17,7 @@ def send_signal(widget, body):
 
 
 @pytest.fixture
-def kbdd_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+def kbdd_widget(monkeypatch, widget_manager):
     def start(running, **kwargs):
         # The widget calls `ps` to check whether kbdd is running. Fake the
         # output so the tests don't rely on the state of the host: the
@@ -43,19 +36,13 @@ def kbdd_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
             "libqtile.widget.keyboardkbdd.add_signal_receiver", mock_signal_receiver
         )
 
-        widget = KeyboardKbdd(configured_keyboards=["gb", "us"], **kwargs)
-
-        config = minimal_conf_noscreen
-        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
-        manager_nospawn.start(config)
-
-        return manager_nospawn.c.widget["keyboardkbdd"]
+        return widget_manager(KeyboardKbdd(configured_keyboards=["gb", "us"], **kwargs))
 
     return start
 
 
-def test_keyboardkbdd_process_running(kbdd_manager):
-    widget = kbdd_manager(running=True)
+def test_keyboardkbdd_process_running(kbdd_widget):
+    widget = kbdd_widget(running=True)
 
     assert widget.eval("self.is_kbdd_running") == "True"
     wait_for_text(widget, "gb")
@@ -65,8 +52,8 @@ def test_keyboardkbdd_process_running(kbdd_manager):
     wait_for_text(widget, "us")
 
 
-def test_keyboardkbdd_process_not_running(kbdd_manager):
-    widget = kbdd_manager(running=False)
+def test_keyboardkbdd_process_not_running(kbdd_widget):
+    widget = kbdd_widget(running=False)
 
     assert widget.eval("self.is_kbdd_running") == "False"
     wait_for_text(widget, "N/A")
@@ -80,8 +67,8 @@ def test_keyboardkbdd_process_not_running(kbdd_manager):
 
 # Custom colours are not set until a signal is received
 # TO DO: This should be fixed so the colour is set on __init__
-def test_keyboard_kbdd_colours(kbdd_manager):
-    widget = kbdd_manager(running=True, colours=["#ff0000", "#00ff00"])
+def test_keyboard_kbdd_colours(kbdd_widget):
+    widget = kbdd_widget(running=True, colours=["#ff0000", "#00ff00"])
 
     # Send a signal with the index of the active keyboard
     send_signal(widget, body=0)

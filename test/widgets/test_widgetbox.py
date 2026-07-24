@@ -4,20 +4,15 @@ import libqtile.config
 from libqtile.widget import Systray, TextBox, WidgetBox
 
 
-def test_widgetbox_widget(manager_nospawn, minimal_conf_noscreen):
+def test_widgetbox_widget(manager_nospawn, widget_manager):
     tb_one = TextBox(name="tb_one", text="TB ONE")
     tb_two = TextBox(name="tb_two", text="TB TWO")
 
     # Give widgetbox invalid value for button location
     widget_box = WidgetBox(widgets=[tb_one, tb_two], close_button_location="middle", fontsize=10)
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget_box], 10))]
-
-    manager_nospawn.start(config)
-
+    box = widget_manager(widget_box)
     topbar = manager_nospawn.c.bar["top"]
-    box = manager_nospawn.c.widget["widgetbox"]
 
     def bar_widgets():
         return [w["name"] for w in topbar.info()["widgets"]]

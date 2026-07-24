@@ -1,16 +1,9 @@
 import pytest
 
-import libqtile.bar
-import libqtile.config
 from libqtile import images
 from libqtile.widget import Volume
 from test.helpers import Retry
-from test.widgets.conftest import TEST_DIR
-
-
-@Retry(ignore_exceptions=(AssertionError,))
-def wait_for_colour(widget, colour):
-    assert widget.eval("self.layout.colour") == colour
+from test.widgets.conftest import TEST_DIR, wait_for_eval
 
 
 def test_images_fail():
@@ -19,7 +12,7 @@ def test_images_fail():
         vol.setup_images()
 
 
-def test_images_good(tmpdir, svg_img_as_pypath, manager_nospawn, minimal_conf_noscreen):
+def test_images_good(tmpdir, svg_img_as_pypath, widget_manager):
     names = (
         "audio-volume-high.svg",
         "audio-volume-low.svg",
@@ -30,13 +23,7 @@ def test_images_good(tmpdir, svg_img_as_pypath, manager_nospawn, minimal_conf_no
         target = tmpdir.join(name)
         svg_img_as_pypath.copy(target)
 
-    vol = Volume(theme_path=str(tmpdir), get_volume_command="echo '50%'")
-
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([vol], 10))]
-    manager_nospawn.start(config)
-
-    widget = manager_nospawn.c.widget["volume"]
+    widget = widget_manager(Volume(theme_path=str(tmpdir), get_volume_command="echo '50%'"))
 
     @Retry(ignore_exceptions=(AssertionError,))
     def wait_for_images():
@@ -102,7 +89,7 @@ def test_formats():
     assert vol.text == "Volume: 50% M"
 
 
-def test_foregrounds(tmpdir, manager_nospawn, minimal_conf_noscreen):
+def test_foregrounds(tmpdir, widget_manager):
     foreground = "#dddddd"
     mute_foreground = "#888888"
 
@@ -120,19 +107,15 @@ def test_foregrounds(tmpdir, manager_nospawn, minimal_conf_noscreen):
         check_mute_command=f"cat {mute_file}",
     )
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([vol], 10))]
-    manager_nospawn.start(config)
-
-    widget = manager_nospawn.c.widget["volume"]
+    widget = widget_manager(vol)
 
     # Unmuted, no mute_foreground set: use foreground
-    wait_for_colour(widget, foreground)
+    wait_for_eval(widget, "self.layout.colour", foreground)
 
     # Setting mute_foreground doesn't change the colour while unmuted
     widget.eval(f"self.mute_foreground = '{mute_foreground}'")
-    wait_for_colour(widget, foreground)
+    wait_for_eval(widget, "self.layout.colour", foreground)
 
     # Muting the volume changes the colour to mute_foreground
     mute_file.write("[off]")
-    wait_for_colour(widget, mute_foreground)
+    wait_for_eval(widget, "self.layout.colour", mute_foreground)

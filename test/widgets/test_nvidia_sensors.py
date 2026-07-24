@@ -1,9 +1,10 @@
 import pytest
 
-import libqtile.bar
-import libqtile.config
 from libqtile.widget.nvidia_sensors import NvidiaSensors, _all_sensors_names_correct
-from test.helpers import Retry
+from test.widgets.conftest import wait_for_eval, wait_for_text
+
+FOREGROUND_NORMAL = "#ffffff"
+FOREGROUND_ALERT = "#ff0000"
 
 
 def test_nvidia_sensors_input_regex():
@@ -16,49 +17,33 @@ def test_nvidia_sensors_input_regex():
     assert not _all_sensors_names_correct(incorrect_sensors)
 
 
-@Retry(ignore_exceptions=(AssertionError,))
-def wait_for_temperature(widget, temperature):
-    assert widget.info()["text"] == temperature
-
-
 def set_temperature(widget, temperature):
     """Change the mocked nvidia-smi output and repoll the widget."""
-    widget.eval(
-        f"self.call_process = lambda *args, **kwargs: '{temperature}'\nself.update(self.poll())"
-    )
+    widget.eval(f"self.call_process = lambda *args, **kwargs: '{temperature}'")
+    widget.force_update()
 
 
 @pytest.fixture
-def nvidia_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
-    widget = NvidiaSensors()
+def nvidia_widget(monkeypatch, widget_manager):
+    widget = NvidiaSensors(foreground=FOREGROUND_NORMAL, foreground_alert=FOREGROUND_ALERT)
     # Replace internal call_process since we cant rely
     # on the test computer having the required hardware.
     monkeypatch.setattr(widget, "call_process", lambda *args, **kwargs: "20")
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
-    manager_nospawn.start(config)
-
-    yield manager_nospawn.c.widget["nvidiasensors"]
+    yield widget_manager(widget)
 
 
-def test_nvidia_sensors_foreground_colour(nvidia_manager):
+def test_nvidia_sensors_foreground_colour(nvidia_widget):
     # Initial temperature
-    wait_for_temperature(nvidia_manager, "20°C")
-    assert nvidia_manager.eval("self.layout.colour") == nvidia_manager.eval(
-        "self.foreground_normal"
-    )
+    wait_for_text(nvidia_widget, "20°C")
+    wait_for_eval(nvidia_widget, "self.layout.colour", FOREGROUND_NORMAL)
 
     # Simulate GPU overheating
-    set_temperature(nvidia_manager, 90)
-    wait_for_temperature(nvidia_manager, "90°C")
-    assert nvidia_manager.eval("self.layout.colour") == nvidia_manager.eval(
-        "self.foreground_alert"
-    )
+    set_temperature(nvidia_widget, 90)
+    wait_for_text(nvidia_widget, "90°C")
+    wait_for_eval(nvidia_widget, "self.layout.colour", FOREGROUND_ALERT)
 
     # And cooling back down
-    set_temperature(nvidia_manager, 20)
-    wait_for_temperature(nvidia_manager, "20°C")
-    assert nvidia_manager.eval("self.layout.colour") == nvidia_manager.eval(
-        "self.foreground_normal"
-    )
+    set_temperature(nvidia_widget, 20)
+    wait_for_text(nvidia_widget, "20°C")
+    wait_for_eval(nvidia_widget, "self.layout.colour", FOREGROUND_NORMAL)

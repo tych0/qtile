@@ -5,8 +5,38 @@ import subprocess
 
 import pytest
 
+import libqtile.bar
+import libqtile.config
+from test.helpers import Retry
+
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(TEST_DIR), "data")
+
+
+@pytest.fixture(scope="function")
+def widget_manager(manager_nospawn, minimal_conf_noscreen):
+    """Start qtile with the given widget in a bar and return the widget's command proxy."""
+
+    def start(widget):
+        config = minimal_conf_noscreen
+        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
+        manager_nospawn.start(config)
+
+        return manager_nospawn.c.widget[widget.name]
+
+    return start
+
+
+@Retry(ignore_exceptions=(AssertionError,))
+def wait_for_text(widget, text):
+    """Wait until the widget displays the given text."""
+    assert widget.info()["text"] == text
+
+
+@Retry(ignore_exceptions=(AssertionError,))
+def wait_for_eval(widget, expression, result):
+    """Wait until evaluating `expression` in the widget gives `result`."""
+    assert widget.eval(expression) == result
 
 
 @pytest.fixture(scope="module")

@@ -4,9 +4,6 @@ from types import ModuleType
 
 import pytest
 
-import libqtile.bar
-import libqtile.config
-
 TRACK = "Never Gonna Give You Up - Whenever You Need Somebody - Rick Astley"
 
 
@@ -64,21 +61,15 @@ def patched_module(monkeypatch):
 
 
 @pytest.fixture
-def mpris_manager(patched_module, manager_nospawn, minimal_conf_noscreen):
+def mpris_widget(patched_module, widget_manager):
     def start(**kwargs):
-        widget = patched_module.Mpris2(**kwargs)
-
-        config = minimal_conf_noscreen
-        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
-        manager_nospawn.start(config)
-
-        return manager_nospawn.c.widget["mpris2"]
+        return widget_manager(patched_module.Mpris2(**kwargs))
 
     return start
 
 
-def test_mpris2_signal_handling(mpris_manager):
-    mp = mpris_manager()
+def test_mpris2_signal_handling(mpris_widget):
+    mp = mpris_widget()
 
     assert mp.eval("self.displaytext") == ""
 
@@ -117,8 +108,8 @@ def test_mpris2_signal_handling(mpris_manager):
     assert info["isplaying"]
 
 
-def test_mpris2_custom_stop_text(mpris_manager):
-    mp = mpris_manager(stop_pause_text="Test Paused")
+def test_mpris2_custom_stop_text(mpris_widget):
+    mp = mpris_widget(stop_pause_text="Test Paused")
 
     parse_message(mp, "Playing", metadata=True)
     assert mp.eval("self.text") == TRACK
@@ -128,17 +119,17 @@ def test_mpris2_custom_stop_text(mpris_manager):
     assert mp.eval("self.text") == "Test Paused"
 
 
-def test_mpris2_no_metadata(mpris_manager):
-    mp = mpris_manager()
+def test_mpris2_no_metadata(mpris_widget):
+    mp = mpris_widget()
 
     parse_message(mp, "Playing")
     assert mp.eval("self.text") == "No metadata for current track"
 
 
-def test_mpris2_no_scroll(mpris_manager):
+def test_mpris2_no_scroll(mpris_widget):
     # If no scrolling, then the update function creates the text to display
     # and draws the bar.
-    mp = mpris_manager(scroll_chars=None)
+    mp = mpris_widget(scroll_chars=None)
 
     parse_message(mp, "Playing", metadata=True)
     assert mp.eval("self.text") == TRACK

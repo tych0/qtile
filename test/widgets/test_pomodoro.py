@@ -2,9 +2,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-import libqtile.bar
-import libqtile.config
 from libqtile.widget import pomodoro
+from test.widgets.conftest import wait_for_eval, wait_for_text
 
 COLOR_INACTIVE = "123456"
 COLOR_ACTIVE = "654321"
@@ -27,7 +26,7 @@ class MockDatetime(datetime):
 
 
 @pytest.fixture
-def pomodoro_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+def pomodoro_widget(monkeypatch, widget_manager):
     MockDatetime._adjustment = timedelta(0)
     monkeypatch.setattr("libqtile.widget.pomodoro.datetime", MockDatetime)
 
@@ -48,11 +47,7 @@ def pomodoro_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
         prefix_paused=PREFIX_PAUSED,
     )
 
-    config = minimal_conf_noscreen
-    config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
-    manager_nospawn.start(config)
-
-    yield manager_nospawn.c.widget["pomodoro"]
+    yield widget_manager(widget)
 
 
 def advance_time(widget, minutes):
@@ -64,58 +59,59 @@ def advance_time(widget, minutes):
     )
 
 
-def test_pomodoro(pomodoro_manager):
-    widget = pomodoro_manager
+def check(widget, text, colour=None):
+    """Repoll the widget and check the text (and, optionally, colour) it displays."""
+    widget.force_update()
+    wait_for_text(widget, text)
+    if colour is not None:
+        wait_for_eval(widget, "self.layout.colour", colour)
+
+
+def test_pomodoro(pomodoro_widget):
+    widget = pomodoro_widget
 
     # When we start, widget is inactive
-    assert widget.eval("self.poll()") == PREFIX_INACTIVE
-    assert widget.eval("self.layout.colour") == COLOR_INACTIVE
+    check(widget, PREFIX_INACTIVE, COLOR_INACTIVE)
 
     # Left clicking toggles state
     widget.toggle_break()
-    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:15:00"
-    assert widget.eval("self.layout.colour") == COLOR_ACTIVE
+    check(widget, f"{PREFIX_ACTIVE}0:15:00", COLOR_ACTIVE)
 
     # Another left click should pause
     widget.toggle_break()
-    assert widget.eval("self.poll()") == PREFIX_PAUSED
-    assert widget.eval("self.layout.colour") == COLOR_INACTIVE
+    check(widget, PREFIX_PAUSED, COLOR_INACTIVE)
 
     widget.toggle_break()
     # Add 5 mins should take 5 mins off our timer
     advance_time(widget, 5)
-    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:10:00"
-    assert widget.eval("self.layout.colour") == COLOR_ACTIVE
+    check(widget, f"{PREFIX_ACTIVE}0:10:00", COLOR_ACTIVE)
 
     # Add 10 mins should take us to end of first pomodoro
     # So we get a short break between pomodori
     advance_time(widget, 10)
-    assert widget.eval("self.poll()") == f"{PREFIX_BREAK}0:05:00"
-    assert widget.eval("self.layout.colour") == COLOR_BREAK
+    check(widget, f"{PREFIX_BREAK}0:05:00", COLOR_BREAK)
 
     # Add 5 mins should take us to start of second pomodoro
     advance_time(widget, 5)
-    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:15:00"
-    assert widget.eval("self.layout.colour") == COLOR_ACTIVE
+    check(widget, f"{PREFIX_ACTIVE}0:15:00", COLOR_ACTIVE)
 
     # Add 15 mins should take us to end of second pomodoro
     # and start of long break (as there are only two pomodori)
     advance_time(widget, 15)
-    assert widget.eval("self.poll()") == f"{PREFIX_LONG_BREAK}0:10:00"
-    assert widget.eval("self.layout.colour") == COLOR_BREAK
+    check(widget, f"{PREFIX_LONG_BREAK}0:10:00", COLOR_BREAK)
 
     # Move forward so we're at start of next pomodoro
     advance_time(widget, 10)
-    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:15:00"
+    check(widget, f"{PREFIX_ACTIVE}0:15:00")
 
     # Advance into pomodoro
     advance_time(widget, 10)
-    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:05:00"
+    check(widget, f"{PREFIX_ACTIVE}0:05:00")
 
     # Right-click toggles active state
     widget.toggle_active()
-    assert widget.eval("self.poll()") == PREFIX_INACTIVE
+    check(widget, PREFIX_INACTIVE)
 
     # Right-click again resets status
     widget.toggle_active()
-    assert widget.eval("self.poll()") == f"{PREFIX_ACTIVE}0:15:00"
+    check(widget, f"{PREFIX_ACTIVE}0:15:00")

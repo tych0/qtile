@@ -4,9 +4,6 @@ from types import ModuleType
 
 import pytest
 
-import libqtile.bar
-import libqtile.config
-
 
 # Net widget only needs bytes_recv/sent attributes
 # Widget displays increase since last poll therefore
@@ -33,7 +30,7 @@ class MockPsutil(ModuleType):
 # Patch the widget with our mock psutil module and run it in a real manager.
 # Wrap the manager start so tests can pass keyword arguments to the widget.
 @pytest.fixture
-def net_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
+def net_widget(monkeypatch, widget_manager):
     def start(**kwargs):
         MockPsutil.up = 0
         MockPsutil.down = 0
@@ -42,29 +39,24 @@ def net_manager(monkeypatch, manager_nospawn, minimal_conf_noscreen):
 
         # Reload fixes cases where psutil may have been imported previously
         reload(net)
-        widget = net.Net(
-            format="{interface}: U {up}{up_suffix} {up_cumulative}{up_cumulative_suffix} D "
-            "{down}{down_suffix} {down_cumulative}{down_cumulative_suffix} T {total}"
-            "{total_suffix} {total_cumulative}{total_cumulative_suffix}",
-            **kwargs,
+        return widget_manager(
+            net.Net(
+                format="{interface}: U {up}{up_suffix} {up_cumulative}{up_cumulative_suffix} D "
+                "{down}{down_suffix} {down_cumulative}{down_cumulative_suffix} T {total}"
+                "{total_suffix} {total_cumulative}{total_cumulative_suffix}",
+                **kwargs,
+            )
         )
-
-        config = minimal_conf_noscreen
-        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
-        manager_nospawn.start(config)
-
-        return manager_nospawn
 
     return start
 
 
-def poll_text(manager):
+def poll_text(widget):
     """Reset the mocked counters and poll the widget once.
 
     This is done in a single `eval` call so the widget's own timer cannot
     fire between the reset and the poll.
     """
-    widget = manager.c.widget["net"]
     widget.eval(
         "import psutil\n"
         "type(psutil).up = 0\n"
@@ -75,22 +67,22 @@ def poll_text(manager):
     return widget.eval("self._test_text")
 
 
-def test_net_defaults(net_manager):
+def test_net_defaults(net_widget):
     """Default: widget shows `all` interfaces"""
-    manager = net_manager()
-    assert poll_text(manager) == "all: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
+    assert poll_text(net_widget()) == "all: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
 
 
-def test_net_single_interface(net_manager):
+def test_net_single_interface(net_widget):
     """Display single named interface"""
-    manager = net_manager(interface="wlp58s0")
-    assert poll_text(manager) == "wlp58s0: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
+    assert (
+        poll_text(net_widget(interface="wlp58s0"))
+        == "wlp58s0: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
+    )
 
 
-def test_net_list_interface(net_manager):
+def test_net_list_interface(net_widget):
     """Display multiple named interfaces"""
-    manager = net_manager(interface=["wlp58s0", "lo"])
-    assert poll_text(manager) == (
+    assert poll_text(net_widget(interface=["wlp58s0", "lo"])) == (
         "wlp58s0: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB "
         "lo: U 40.0kB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
     )
@@ -104,34 +96,34 @@ def test_net_invalid_interface():
         _ = net.Net(interface=12)
 
 
-def test_net_use_bits(net_manager):
+def test_net_use_bits(net_widget):
     """Display all interfaces in bits rather than bytes"""
-    manager = net_manager(use_bits=True)
-    assert poll_text(manager) == "all: U 320.0kb 640.0kb D 9.6Mb 19.2Mb T 9.92Mb 19.84Mb"
+    assert (
+        poll_text(net_widget(use_bits=True))
+        == "all: U 320.0kb 640.0kb D 9.6Mb 19.2Mb T 9.92Mb 19.84Mb"
+    )
 
 
-def test_net_convert_zero_b(net_manager):
+def test_net_convert_zero_b(net_widget):
     """Zero bytes is a special case in `convert_b`"""
-    manager = net_manager()
-    assert manager.c.widget["net"].eval("self.convert_b(0.0)") == "(0.0, 'B')"
+    assert net_widget().eval("self.convert_b(0.0)") == "(0.0, 'B')"
 
 
-def test_net_use_prefix(net_manager):
+def test_net_use_prefix(net_widget):
     """Tests `prefix` configurable option"""
-    manager = net_manager(prefix="M")
-    assert poll_text(manager) == "all: U 0.04MB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
+    assert (
+        poll_text(net_widget(prefix="M")) == "all: U 0.04MB 80.0kB D 1.2MB 2.4MB T 1.24MB 2.48MB"
+    )
 
 
-def test_net_missing_interface(net_manager):
+def test_net_missing_interface(net_widget):
     """Tests `missing_interface` option"""
-    manager = net_manager(interface="unknown_interface")
-    assert poll_text(manager) == "unknown_interface not found"
+    assert poll_text(net_widget(interface="unknown_interface")) == "unknown_interface not found"
 
 
-def test_net_missing_interface_custom_string(net_manager):
+def test_net_missing_interface_custom_string(net_widget):
     """Tests `missing_interface` option with custom string"""
-    manager = net_manager(interface="unknown_interface", missing_interface="")
-    assert poll_text(manager) == ""
+    assert poll_text(net_widget(interface="unknown_interface", missing_interface="")) == ""
 
 
 # Untested: 128-129 - generic exception catching

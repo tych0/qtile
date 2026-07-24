@@ -1,23 +1,9 @@
 import pytest
 
-import libqtile.bar
-import libqtile.config
 from libqtile import images
 from libqtile.widget import battery
 from libqtile.widget.battery import Battery, BatteryIcon, BatteryState, BatteryStatus
-from test.widgets.conftest import TEST_DIR
-
-
-@pytest.fixture
-def battery_manager(manager_nospawn, minimal_conf_noscreen):
-    def start(widget):
-        config = minimal_conf_noscreen
-        config.screens = [libqtile.config.Screen(top=libqtile.bar.Bar([widget], 10))]
-        manager_nospawn.start(config)
-
-        return manager_nospawn.c.widget[widget.name]
-
-    return start
+from test.widgets.conftest import TEST_DIR, wait_for_eval
 
 
 def set_battery_status(widget, state, percent):
@@ -31,9 +17,9 @@ def set_battery_status(widget, state, percent):
         "    time=1729,\n"
         "    charge_start_threshold=0,\n"
         "    charge_end_threshold=100,\n"
-        ")\n"
-        "self.update(self.poll())"
+        ")"
     )
+    widget.force_update()
 
 
 class DummyBattery:
@@ -257,7 +243,7 @@ def test_images_fail():
         batt.setup_images()
 
 
-def test_images_good(tmpdir, svg_img_as_pypath, battery_manager, monkeypatch):
+def test_images_good(tmpdir, svg_img_as_pypath, widget_manager, monkeypatch):
     """Test BatteryIcon() with a good theme_path
 
     This theme path does contain all of the required images.
@@ -279,7 +265,7 @@ def test_images_good(tmpdir, svg_img_as_pypath, battery_manager, monkeypatch):
         mp.setattr(battery, "load_battery", dummy_load_battery(ok))
         batt = BatteryIcon(theme_path=str(tmpdir))
 
-    widget = battery_manager(batt)
+    widget = widget_manager(batt)
     assert widget.eval("len(self.images)") == str(len(BatteryIcon.icon_names))
 
     widget.eval(
@@ -292,7 +278,7 @@ def test_images_good(tmpdir, svg_img_as_pypath, battery_manager, monkeypatch):
     assert widget.eval("self._test_result") == "True"
 
 
-def test_images_default(battery_manager, monkeypatch):
+def test_images_default(widget_manager, monkeypatch):
     """Test BatteryIcon() with the default theme_path
 
     Ensure that the default images are successfully loaded.
@@ -310,7 +296,7 @@ def test_images_default(battery_manager, monkeypatch):
         mp.setattr(battery, "load_battery", dummy_load_battery(ok))
         batt = BatteryIcon()
 
-    widget = battery_manager(batt)
+    widget = widget_manager(batt)
     assert widget.eval("len(self.images)") == str(len(BatteryIcon.icon_names))
 
     widget.eval(
@@ -323,7 +309,7 @@ def test_images_default(battery_manager, monkeypatch):
     assert widget.eval("self._test_result") == "True"
 
 
-def test_battery_background(battery_manager, monkeypatch):
+def test_battery_background(widget_manager, monkeypatch):
     ok = BatteryStatus(
         state=BatteryState.DISCHARGING,
         percent=0.5,
@@ -340,7 +326,7 @@ def test_battery_background(battery_manager, monkeypatch):
         mp.setattr(battery, "load_battery", dummy_load_battery(ok))
         batt = Battery(low_percentage=0.2, low_background=low_background, background=background)
 
-    widget = battery_manager(batt)
+    widget = widget_manager(batt)
 
     assert widget.eval("self.background") == background
     set_battery_status(widget, "DISCHARGING", 0.1)
@@ -355,41 +341,41 @@ def save_battery_percentage(self, charge_start_threshold, charge_end_threshold):
 
 def polled_thresholds(widget):
     """Poll the widget and return any thresholds set during the poll."""
-    widget.eval("self.poll()")
+    widget.force_update()
     return widget.eval("getattr(self._battery, '_test_thresholds', None)")
 
 
-def test_charge_control(battery_manager, monkeypatch):
+def test_charge_control(widget_manager, monkeypatch):
     monkeypatch.setattr(
         battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
     )
     batt = Battery(charge_controller=lambda: (5, 10))
 
-    widget = battery_manager(batt)
+    widget = widget_manager(batt)
     assert polled_thresholds(widget) == "(5, 10)"
 
 
-def test_charge_control_disabled(battery_manager, monkeypatch):
+def test_charge_control_disabled(widget_manager, monkeypatch):
     monkeypatch.setattr(
         battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
     )
     batt = Battery(charge_controller=None)
 
-    widget = battery_manager(batt)
+    widget = widget_manager(batt)
     assert polled_thresholds(widget) == "None"
 
 
-def test_charge_control_force_charge(battery_manager, monkeypatch):
+def test_charge_control_force_charge(widget_manager, monkeypatch):
     monkeypatch.setattr(
         battery._LinuxBattery, "set_battery_charge_thresholds", save_battery_percentage
     )
     batt = Battery(charge_controller=lambda: (0, 90), force_charge=True)
 
-    widget = battery_manager(batt)
+    widget = widget_manager(batt)
     assert polled_thresholds(widget) == "(0, 100)"
 
 
-def test_charging_foreground(battery_manager, monkeypatch):
+def test_charging_foreground(widget_manager, monkeypatch):
     foreground = "#dddddd"
     charging_foreground = "#00ff00"
     low_foreground = "#ff0000"
@@ -412,12 +398,11 @@ def test_charging_foreground(battery_manager, monkeypatch):
             low_percentage=0.3,
         )
 
-    widget = battery_manager(batt)
-    widget.eval("self.poll()")
-    assert widget.eval("self.layout.colour") == charging_foreground
+    widget = widget_manager(batt)
+    wait_for_eval(widget, "self.layout.colour", charging_foreground)
 
 
-def test_discharging_foreground(battery_manager, monkeypatch):
+def test_discharging_foreground(widget_manager, monkeypatch):
     foreground = "#dddddd"
     charging_foreground = "#00ff00"
     low_foreground = "#ff0000"
@@ -440,12 +425,11 @@ def test_discharging_foreground(battery_manager, monkeypatch):
             low_percentage=0.3,
         )
 
-    widget = battery_manager(batt)
-    widget.eval("self.poll()")
-    assert widget.eval("self.layout.colour") == foreground
+    widget = widget_manager(batt)
+    wait_for_eval(widget, "self.layout.colour", foreground)
 
 
-def test_low_foreground(battery_manager, monkeypatch):
+def test_low_foreground(widget_manager, monkeypatch):
     foreground = "#dddddd"
     charging_foreground = "#00ff00"
     low_foreground = "#ff0000"
@@ -468,12 +452,11 @@ def test_low_foreground(battery_manager, monkeypatch):
             low_percentage=0.3,
         )
 
-    widget = battery_manager(batt)
-    widget.eval("self.poll()")
-    assert widget.eval("self.layout.colour") == low_foreground
+    widget = widget_manager(batt)
+    wait_for_eval(widget, "self.layout.colour", low_foreground)
 
 
-def test_no_charging_foreground(battery_manager, monkeypatch):
+def test_no_charging_foreground(widget_manager, monkeypatch):
     foreground = "#dddddd"
     charging_foreground = None
     low_foreground = "#ff0000"
@@ -496,6 +479,5 @@ def test_no_charging_foreground(battery_manager, monkeypatch):
             low_percentage=0.3,
         )
 
-    widget = battery_manager(batt)
-    widget.eval("self.poll()")
-    assert widget.eval("self.layout.colour") == foreground
+    widget = widget_manager(batt)
+    wait_for_eval(widget, "self.layout.colour", foreground)
