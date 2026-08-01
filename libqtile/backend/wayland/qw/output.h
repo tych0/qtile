@@ -66,4 +66,7 @@ void qw_output_paint_wallpaper(struct qw_output *output, cairo_surface_t *source
 
 void qw_output_paint_background_color(struct qw_output *output, float color[4]);
 
+// Destroy the output's wallpaper/background colour scene nodes and resources
+void qw_output_background_destroy(struct qw_output *output);
+
 #endif /* OUTPUT_H */
