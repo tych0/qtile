@@ -17,10 +17,21 @@ void qw_cursor_destroy(struct qw_cursor *cursor) {
     wl_list_remove(&cursor->frame.link);
     wl_list_remove(&cursor->button.link);
     wl_list_remove(&cursor->request_set_cursor_shape.link);
+    wl_list_remove(&cursor->saved_surface_destroy.link);
+    wl_list_remove(&cursor->constraint_commit.link);
 
     wlr_xcursor_manager_destroy(cursor->mgr);
+    wlr_xcursor_manager_destroy(cursor->xwayland_mgr);
+    wlr_cursor_destroy(cursor->cursor);
+    pixman_region32_fini(&cursor->confine);
 
     free(cursor);
+}
+
+void qw_cursor_forget_view(struct qw_cursor *cursor, struct qw_view *view) {
+    if (cursor != NULL && cursor->view == view) {
+        cursor->view = NULL;
+    }
 }
 
 // Forward declaration: dispatch Internal-view enter/leave/motion to compositor.
@@ -212,6 +223,18 @@ void qw_cursor_warp_cursor(struct qw_cursor *cursor, double x, double y, bool mo
     }
 }
 
+// The saved cursor surface belongs to the client and can be destroyed at any
+// time; drop our reference when that happens so qw_cursor_show() doesn't use
+// freed memory.
+static void qw_cursor_handle_saved_surface_destroy(struct wl_listener *listener, void *data) {
+    UNUSED(data);
+    struct qw_cursor *cursor = wl_container_of(listener, cursor, saved_surface_destroy);
+
+    cursor->saved_surface = NULL;
+    wl_list_remove(&cursor->saved_surface_destroy.link);
+    wl_list_init(&cursor->saved_surface_destroy.link);
+}
+
 static void qw_cursor_handle_seat_request_set(struct wl_listener *listener, void *data) {
     // Handle client request to set pointer cursor image
     struct qw_cursor *cursor = wl_container_of(listener, cursor, request_set);
@@ -224,9 +247,14 @@ static void qw_cursor_handle_seat_request_set(struct wl_listener *listener, void
     }
 
     // Save the requested surface and hotspot info
+    wl_list_remove(&cursor->saved_surface_destroy.link);
+    wl_list_init(&cursor->saved_surface_destroy.link);
     cursor->saved_surface = event->surface;
     cursor->saved_hotspot_x = event->hotspot_x;
     cursor->saved_hotspot_y = event->hotspot_y;
+    if (event->surface != NULL) {
+        wl_signal_add(&event->surface->events.destroy, &cursor->saved_surface_destroy);
+    }
 
     if (cursor->hidden) {
         // Skip applying the cursor while hidden
@@ -436,6 +464,9 @@ struct qw_cursor *qw_server_cursor_create(struct qw_server *server) {
                   &cursor->request_set_cursor_shape);
 
     wl_list_init(&cursor->constraint_commit.link);
+    cursor->saved_surface_destroy.notify = qw_cursor_handle_saved_surface_destroy;
+    wl_list_init(&cursor->saved_surface_destroy.link);
+    pixman_region32_init(&cursor->confine);
 
     return cursor;
 }

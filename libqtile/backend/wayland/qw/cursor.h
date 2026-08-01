@@ -7,6 +7,7 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 
 struct qw_server; // Forward declaration to avoid circular dependency
+struct qw_view;
 
 struct qw_implicit_grab {
     double start_dx;
@@ -35,6 +36,7 @@ struct qw_cursor {
     struct wlr_xcursor_manager *mgr;
     struct wlr_xcursor_manager *xwayland_mgr;
     struct wlr_surface *saved_surface;
+    struct wl_listener saved_surface_destroy;
     uint32_t saved_hotspot_x;
     uint32_t saved_hotspot_y;
     bool hidden;
@@ -62,6 +64,9 @@ struct qw_cursor *qw_server_cursor_create(struct qw_server *cursor);
 void qw_cursor_warp_cursor(struct qw_cursor *cursor, double x, double y, bool motion);
 
 void qw_cursor_update_pointer_focus(struct qw_cursor *cursor);
+
+// Drop any reference the cursor holds to a view that is about to be freed
+void qw_cursor_forget_view(struct qw_cursor *cursor, struct qw_view *view);
 
 // Functions for hiding and showing the cursor
 void qw_cursor_hide(struct qw_cursor *cursor);

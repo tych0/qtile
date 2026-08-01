@@ -307,9 +307,11 @@ class Core(base.Core):
     def get_config(self) -> ffi.CData:
         config = ffi.new("struct qw_qtile_config *")
         theme = self.qtile.config.wl_xcursor_theme
-        config.wl_xcursor_theme = (
-            ffi.new("char[]", theme.encode()) if theme is not None else ffi.NULL
-        )
+        # Assigning a temporary ffi.new("char[]") into a struct field does not
+        # keep the buffer alive, so hold a reference alongside the struct or C
+        # would read freed memory through wl_xcursor_theme.
+        self._config_theme = ffi.new("char[]", theme.encode()) if theme is not None else None
+        config.wl_xcursor_theme = self._config_theme if theme is not None else ffi.NULL
         config.wl_xcursor_size = self.qtile.config.wl_xcursor_size
         self._config = config  # Reference to keep config alive
         return config

@@ -15,8 +15,10 @@
 // cairo largely uses vector drawing primitives, this produces a sharper result than letting wayland
 // upscale for us. We need to set the destination size for wayland to correctly scale the buffer
 static void qw_internal_view_buffer_new(struct qw_internal_view *view, bool init) {
+    cairo_surface_t *old_surface = NULL;
     if (!init) {
         wlr_buffer_drop(view->buffer);
+        old_surface = view->image_surface;
     }
 
     int scaled_width = (int)(view->base.width * view->scale);
@@ -37,6 +39,13 @@ static void qw_internal_view_buffer_new(struct qw_internal_view *view, bool init
     } else if (!init) {
         wlr_scene_buffer_set_buffer_with_damage(view->scene_buffer, view->buffer, NULL);
         wlr_scene_buffer_set_dest_size(view->scene_buffer, view->base.width, view->base.height);
+    }
+
+    // The old cairo surface backed the old buffer's pixels; it can only be
+    // destroyed once the scene buffer has been switched to the new buffer.
+    // Keep it (leaking on this error path) if the swap didn't happen.
+    if (old_surface != NULL && view->buffer != NULL) {
+        cairo_surface_destroy(old_surface);
     }
 }
 
@@ -121,10 +130,13 @@ static void qw_internal_view_unhide(void *self) {
 
 static void qw_internal_view_kill(void *self) {
     struct qw_internal_view *view = (struct qw_internal_view *)self;
+    qw_cursor_forget_view(view->base.server->cursor, &view->base);
+    // Destroy the scene node first so the scene releases its buffer lock
+    // before the buffer and its backing pixels go away
+    wlr_scene_node_destroy(&view->base.content_tree->node);
+    wlr_buffer_drop(view->buffer);
     cairo_surface_destroy(view->image_surface);
     view->image_surface = NULL;
-    wlr_buffer_drop(view->buffer);
-    wlr_scene_node_destroy(&view->base.content_tree->node);
     free(view);
 }
 

@@ -215,6 +215,10 @@ void qw_session_lock_handle_new_surface(struct wl_listener *listener, void *data
     }
 
     struct qw_session_lock_surface *sls = calloc(1, sizeof(*sls));
+    if (sls == NULL) {
+        wlr_log(WLR_ERROR, "failed to create qw_session_lock_surface struct");
+        return;
+    }
     sls->server = lock->server;
     sls->lock_surface = lock_surface;
 

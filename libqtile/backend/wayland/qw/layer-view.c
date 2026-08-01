@@ -17,6 +17,9 @@ static void qw_layer_view_handle_destroy(struct wl_listener *listener, void *dat
     wl_list_remove(&layer_view->unmap.link);
     wl_list_remove(&layer_view->commit.link);
     wl_list_remove(&layer_view->new_popup.link);
+    // The cursor can still reference this view if it disappears under the
+    // pointer without a motion event; drop that reference before freeing
+    qw_cursor_forget_view(layer_view->server->cursor, &layer_view->base);
     wlr_scene_node_destroy(&layer_view->scene->tree->node);
     wlr_scene_node_destroy(&layer_view->popups->node);
     free(layer_view);
@@ -78,6 +81,12 @@ static void qw_layer_view_handle_commit(struct wl_listener *listener, void *data
         return;
     }
     layer_view->mapped = mapped;
+
+    // The output may have been destroyed already (its destroy handler clears
+    // this pointer); nothing to arrange in that case
+    if (layer_view->output == NULL) {
+        return;
+    }
 
     int layer = zlayer_to_layer[layer_view->surface->current.layer];
     struct wlr_scene_tree *layer_tree = layer_view->server->scene_windows_layers[layer];

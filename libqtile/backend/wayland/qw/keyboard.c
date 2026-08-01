@@ -17,6 +17,13 @@ static void qw_keyboard_handle_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&keyboard->destroy.link);
     wl_list_remove(&keyboard->link);
 
+    // The repeat timer holds a pointer to this keyboard; remove it so it can't
+    // fire after the keyboard is freed (e.g. device unplugged mid key-repeat)
+    if (keyboard->repeat_source != NULL) {
+        wl_event_source_remove(keyboard->repeat_source);
+        keyboard->repeat_source = NULL;
+    }
+
     // There appears to be a delay between when a keyboard is destroyed and when
     // wlroots updates the seat's active keyboard. It is possible to miss a focus
     // event during this delay (issue #5927)

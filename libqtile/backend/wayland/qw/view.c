@@ -242,12 +242,15 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
             struct wlr_scene_buffer **buffers =
                 create_scene_buffers_from_surface(view->content_tree, surface, sides, 4);
 
-            for (int j = 0; j < 4; j++) {
-                if (!buffers[j]) {
-                    continue;
+            if (buffers != NULL) {
+                for (int j = 0; j < 4; j++) {
+                    if (!buffers[j]) {
+                        continue;
+                    }
+                    wlr_scene_node_set_position(&buffers[j]->node, sides[j].x, sides[j].y);
+                    view->borders[i].scene_bufs[j] = buffers[j];
                 }
-                wlr_scene_node_set_position(&buffers[j]->node, sides[j].x, sides[j].y);
-                view->borders[i].scene_bufs[j] = buffers[j];
+                free(buffers);
             }
         }
 
@@ -261,7 +264,8 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
 static void qw_handle_ftl_request_activate(struct wl_listener *listener, void *data) {
     UNUSED(data);
     struct qw_view *view = wl_container_of(listener, view, ftl_request_activate);
-    if (view == NULL) {
+    // Static windows clear these callbacks, so guard against NULL
+    if (view == NULL || view->request_focus_cb == NULL) {
         return;
     }
     int handled = view->request_focus_cb(view->cb_data);
@@ -273,7 +277,7 @@ static void qw_handle_ftl_request_activate(struct wl_listener *listener, void *d
 static void qw_handle_ftl_request_close(struct wl_listener *listener, void *data) {
     UNUSED(data);
     struct qw_view *view = wl_container_of(listener, view, ftl_request_close);
-    if (view == NULL) {
+    if (view == NULL || view->request_close_cb == NULL) {
         return;
     }
     int handled = view->request_close_cb(view->cb_data);
@@ -285,7 +289,7 @@ static void qw_handle_ftl_request_close(struct wl_listener *listener, void *data
 static void qw_handle_ftl_request_maximize(struct wl_listener *listener, void *data) {
     struct wlr_foreign_toplevel_handle_v1_maximized_event *event = data;
     struct qw_view *view = wl_container_of(listener, view, ftl_request_maximize);
-    if (view == NULL) {
+    if (view == NULL || view->request_maximize_cb == NULL) {
         return;
     }
     int handled = view->request_maximize_cb(event->maximized, view->cb_data);
@@ -297,7 +301,7 @@ static void qw_handle_ftl_request_maximize(struct wl_listener *listener, void *d
 static void qw_handle_ftl_request_minimize(struct wl_listener *listener, void *data) {
     struct wlr_foreign_toplevel_handle_v1_minimized_event *event = data;
     struct qw_view *view = wl_container_of(listener, view, ftl_request_minimize);
-    if (view == NULL) {
+    if (view == NULL || view->request_minimize_cb == NULL) {
         return;
     }
     int handled = view->request_minimize_cb(event->minimized, view->cb_data);
@@ -309,7 +313,7 @@ static void qw_handle_ftl_request_minimize(struct wl_listener *listener, void *d
 static void qw_handle_ftl_request_fullscreen(struct wl_listener *listener, void *data) {
     struct wlr_foreign_toplevel_handle_v1_fullscreen_event *event = data;
     struct qw_view *view = wl_container_of(listener, view, ftl_request_fullscreen);
-    if (view == NULL) {
+    if (view == NULL || view->request_fullscreen_cb == NULL) {
         return;
     }
     int handled = view->request_fullscreen_cb(event->fullscreen, view->cb_data);
@@ -392,6 +396,10 @@ struct qw_output *qw_view_get_primary_output(struct qw_view *view) {
                 primary_output = layout->output;
             }
         }
+    }
+
+    if (primary_output == NULL) {
+        return NULL;
     }
 
     return primary_output->data;

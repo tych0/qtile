@@ -89,13 +89,27 @@ void qw_server_finalize(struct qw_server *server) {
     wl_list_remove(&server->xwayland_ready.link);
     wlr_xwayland_destroy(server->xwayland);
 #endif
+
+    // Free any remaining idle timers and their event sources
+    struct qw_idle_timer *timer, *tmp_timer;
+    wl_list_for_each_safe(timer, tmp_timer, &server->idle_timers, link) {
+        wl_event_source_remove(timer->event_source);
+        wl_list_remove(&timer->link);
+        free(timer);
+    }
+
     wl_display_destroy_clients(server->display);
+    // Destroy the backend (and with it the outputs) while the scene still
+    // exists: qw_output_handle_destroy removes per-output scene nodes
+    wlr_backend_destroy(server->backend);
     wlr_scene_node_destroy(&server->scene->tree.node);
     qw_cursor_destroy(server->cursor);
     wlr_allocator_destroy(server->allocator);
     wlr_renderer_destroy(server->renderer);
-    wlr_backend_destroy(server->backend);
     wl_display_destroy(server->display);
+    // qw_server_poll checks this; make sure a stray poll after finalize
+    // doesn't touch the freed display
+    server->display = NULL;
 }
 
 // Call a callback for each active output, passing its position and dimensions.
@@ -367,6 +381,10 @@ static void qw_server_handle_renderer_lost(struct wl_listener *listener, void *d
             config_head->state.transform = output->wlr_output->transform;
             config_head->state.scale = output->wlr_output->scale;
         }
+
+        // Hand the configuration to the output manager, which takes ownership
+        // of it (and destroys it when it is replaced)
+        wlr_output_manager_v1_set_configuration(server->output_mgr, current_config);
     }
 
     // TODO: Handle existing surfaces/views that might need to be recreated
@@ -419,7 +437,11 @@ static void qw_server_handle_new_xdg_toplevel(struct wl_listener *listener, void
 static void qw_server_handle_new_decoration(struct wl_listener *listener, void *data) {
     UNUSED(listener);
     struct wlr_xdg_toplevel_decoration_v1 *decoration = data;
-    qw_xdg_view_decoration_new(decoration->toplevel->base->data, decoration);
+    struct qw_xdg_view *xdg_view = decoration->toplevel->base->data;
+    if (xdg_view == NULL) {
+        return;
+    }
+    qw_xdg_view_decoration_new(xdg_view, decoration);
 }
 
 static void qw_server_handle_new_layer_surface(struct wl_listener *listener, void *data) {
@@ -640,6 +662,10 @@ static void qw_server_handle_start_drag(struct wl_listener *listener, void *data
     }
 
     struct qw_drag_icon *drag_icon = calloc(1, sizeof(*drag_icon));
+    if (drag_icon == NULL) {
+        wlr_log(WLR_ERROR, "failed to create qw_drag_icon struct");
+        return;
+    }
     drag_icon->server = server;
     drag_icon->scene_icon = wlr_scene_drag_icon_create(server->drag_icon, drag->icon);
     drag_icon->destroy.notify = qw_server_handle_drag_icon_destroy;
@@ -677,6 +703,10 @@ static void qw_server_handle_new_idle_inhibitor(struct wl_listener *listener, vo
     struct wlr_idle_inhibitor_v1 *wlr_inhibitor = data;
 
     struct qw_idle_inhibitor *inhibitor = calloc(1, sizeof(struct qw_idle_inhibitor));
+    if (inhibitor == NULL) {
+        wlr_log(WLR_ERROR, "failed to create qw_idle_inhibitor struct");
+        return;
+    }
 
     inhibitor->server = server;
     inhibitor->wlr_inhibitor = wlr_inhibitor;
@@ -1110,6 +1140,10 @@ void qw_server_add_idle_timer(struct qw_server *server, int seconds) {
     }
 
     struct qw_idle_timer *timer = calloc(1, sizeof(*timer));
+    if (timer == NULL) {
+        wlr_log(WLR_ERROR, "failed to create qw_idle_timer struct");
+        return;
+    }
     timer->server = server;
     timer->seconds = seconds;
     timer->is_idle = false;

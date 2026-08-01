@@ -35,6 +35,19 @@ static void qw_output_handle_destroy(struct wl_listener *listener, void *data) {
     wl_list_remove(&output->destroy.link);
     wl_list_remove(&output->link);
 
+    // Free the per-output nodes that live in server-owned scene trees; they
+    // would otherwise stay in the scene (and keep rendering) after the output
+    // is gone. The wallpaper also owns a cairo surface.
+    qw_output_background_destroy(output);
+    if (output->fullscreen_background != NULL) {
+        wlr_scene_node_destroy(&output->fullscreen_background->node);
+        output->fullscreen_background = NULL;
+    }
+    if (output->blanking_rect != NULL) {
+        wlr_scene_node_destroy(&output->blanking_rect->node);
+        output->blanking_rect = NULL;
+    }
+
     /*
     null out the output pointer on all layer views that belong to this output
     before freeing it. Layer surfaces may be unmapped after output removal (e.g.
@@ -329,18 +342,28 @@ void qw_output_paint_wallpaper(struct qw_output *output, cairo_surface_t *source
     struct wlr_buffer *buffer = cairo_buffer_create(o_width, o_height, stride, data);
     if (buffer == NULL) {
         wlr_log(WLR_ERROR, "Failed to create wlr_buffer from scaled surface");
+        cairo_destroy(cr);
         cairo_surface_destroy(wallpaper_surface);
         return;
     }
 
     struct wlr_scene_buffer *scene_buf =
         wlr_scene_buffer_create(output->server->scene_wallpaper_tree, buffer);
+    if (scene_buf == NULL) {
+        wlr_log(WLR_ERROR, "Failed to create scene buffer for wallpaper.");
+        wlr_buffer_drop(buffer);
+        cairo_destroy(cr);
+        cairo_surface_destroy(wallpaper_surface);
+        return;
+    }
 
     if (output->background.wallpaper == NULL) {
         output->background.wallpaper = calloc(1, sizeof(struct qw_output_background_wallpaper));
         if (!output->background.wallpaper) {
             wlr_log(WLR_ERROR, "Failed to allocate memory for wallpaper image.");
+            wlr_scene_node_destroy(&scene_buf->node);
             wlr_buffer_drop(buffer);
+            cairo_destroy(cr);
             cairo_surface_destroy(wallpaper_surface);
             return;
         }
@@ -375,6 +398,7 @@ void qw_output_paint_background_color(struct qw_output *output, float color[4]) 
         wlr_scene_rect_create(output->server->scene_wallpaper_tree, o_width, o_height, color);
     if (rect == NULL) {
         wlr_log(WLR_ERROR, "Failed to create scene_rect for background.");
+        return;
     }
 
     // Save reference to scene rect so we can destroy it later

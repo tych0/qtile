@@ -88,6 +88,11 @@ static void static_view_handle_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&static_view->request_activate.link);
     wl_list_remove(&static_view->override_redirect.link);
 
+    qw_cursor_forget_view(static_view->base.server->cursor, &static_view->base);
+    if (static_view->base.content_tree != NULL) {
+        wlr_scene_node_destroy(&static_view->base.content_tree->node);
+    }
+
     free(static_view);
 }
 
@@ -219,6 +224,9 @@ static void static_view_handle_override_redirect(struct wl_listener *listener, v
 
     qw_server_xwayland_view_new(server, xwayland_surface);
     struct qw_xwayland_view *xwayland_view = xwayland_surface->data;
+    if (xwayland_view == NULL) {
+        return;
+    }
     if (associated) {
         qw_xwayland_view_handle_associate(&xwayland_view->associate, NULL);
     }
@@ -665,6 +673,10 @@ static void qw_xwayland_view_handle_unmap(struct wl_listener *listener, void *da
     UNUSED(data);
     struct qw_xwayland_view *xwayland_view = wl_container_of(listener, xwayland_view, unmap);
     qw_view_cleanup_borders((struct qw_view *)xwayland_view);
+    // Destroy the foreign toplevel handle now: qtile drops its window (and the
+    // callback userdata) on unmanage, so a foreign client activating/closing an
+    // unmapped view would otherwise call back into freed memory
+    qw_view_ftl_manager_handle_destroy(&xwayland_view->base);
     xwayland_view->base.server->unmanage_view_cb((struct qw_view *)&xwayland_view->base,
                                                  xwayland_view->base.server->cb_data);
     qw_xwayland_view_hide(xwayland_view);
@@ -676,6 +688,13 @@ static void qw_xwayland_view_handle_unmap(struct wl_listener *listener, void *da
     wl_list_remove(&xwayland_view->request_close.link);
     wl_list_remove(&xwayland_view->set_title.link);
     wl_list_remove(&xwayland_view->set_class.link);
+
+    // The map handler creates a fresh subsurface tree on every map; destroy
+    // the old one here or each unmap/map cycle leaks a tree in the scene
+    if (xwayland_view->scene_tree != NULL) {
+        wlr_scene_node_destroy(&xwayland_view->scene_tree->node);
+        xwayland_view->scene_tree = NULL;
+    }
 }
 
 // Called when an override-redirect surface is being converted to a managed view.
@@ -791,7 +810,7 @@ static void qw_xwayland_view_handle_set_hints(struct wl_listener *listener, void
 static void qw_xwayland_view_handle_request_skip_taskbar(struct wl_listener *listener, void *data) {
     UNUSED(data);
     struct qw_xwayland_view *xwayland_view =
-        wl_container_of(listener, xwayland_view, request_activate);
+        wl_container_of(listener, xwayland_view, request_skip_taskbar);
     xwayland_view->base.skip_taskbar = xwayland_view->xwayland_surface->skip_taskbar;
 }
 
@@ -817,6 +836,7 @@ static void qw_xwayland_view_handle_destroy(struct wl_listener *listener, void *
     wl_list_remove(&xwayland_view->request_below.link);
     wl_list_remove(&xwayland_view->request_skip_taskbar.link);
     qw_view_ftl_manager_handle_destroy(&xwayland_view->base);
+    qw_cursor_forget_view(xwayland_view->base.server->cursor, &xwayland_view->base);
     wlr_scene_node_destroy(&xwayland_view->base.content_tree->node);
 
     free(xwayland_view);
@@ -844,6 +864,9 @@ static void qw_xwayland_view_handle_request_override_redirect(struct wl_listener
 
     qw_server_xwayland_static_view_new(server, xwayland_surface);
     struct qw_xwayland_view *static_view = xwayland_surface->data;
+    if (static_view == NULL) {
+        return;
+    }
     if (associated) {
         static_view_handle_associate(&static_view->associate, NULL);
     }

@@ -27,6 +27,9 @@ static void qw_xdg_view_handle_decoration_destroy(struct wl_listener *listener, 
 
     wl_list_remove(&xdg_view->decoration_destroy.link);
     wl_list_remove(&xdg_view->decoration_request_mode.link);
+    // The commit handler checks this pointer, so clear it to avoid using the
+    // freed decoration if the client destroys it before the initial commit
+    xdg_view->decoration = NULL;
 }
 
 // Change xdg surface activate state
@@ -103,6 +106,10 @@ static void qw_xdg_view_handle_unmap(struct wl_listener *listener, void *data) {
 
     struct qw_xdg_view *xdg_view = wl_container_of(listener, xdg_view, unmap);
     qw_view_cleanup_borders((struct qw_view *)xdg_view);
+    // Destroy the foreign toplevel handle now: qtile drops its window (and the
+    // callback userdata) on unmanage, so a foreign client activating/closing an
+    // unmapped view would otherwise call back into freed memory
+    qw_view_ftl_manager_handle_destroy(&xdg_view->base);
     xdg_view->base.server->unmanage_view_cb((struct qw_view *)&xdg_view->base,
                                             xdg_view->base.server->cb_data);
     qw_xdg_view_hide(xdg_view);
@@ -126,9 +133,18 @@ static void qw_xdg_view_handle_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&xdg_view->new_popup.link);
     // TODO: Remove request_move and request_resize listeners if added
 
+    // The decoration can outlive the toplevel; unhook our listeners from it so
+    // they aren't invoked on this freed view
+    if (xdg_view->decoration != NULL) {
+        wl_list_remove(&xdg_view->decoration_destroy.link);
+        wl_list_remove(&xdg_view->decoration_request_mode.link);
+        xdg_view->decoration = NULL;
+    }
+
     // Destroy the foreign toplevel manager and listeners
     qw_view_ftl_manager_handle_destroy(&xdg_view->base);
 
+    qw_cursor_forget_view(xdg_view->base.server->cursor, &xdg_view->base);
     wlr_scene_node_destroy(&xdg_view->base.content_tree->node);
 
     free(xdg_view);
@@ -383,6 +399,9 @@ static void qw_xdg_popup_handle_destroy(struct wl_listener *listener, void *data
     wl_list_remove(&popup->destroy.link);
     wl_list_remove(&popup->surface_commit.link);
     wl_list_remove(&popup->reposition.link);
+    // The cursor may still reference this popup (no motion event fires when a
+    // popup closes under the pointer), so drop that reference before freeing
+    qw_cursor_forget_view(popup->xdg_view->base.server->cursor, &popup->base);
     wlr_scene_node_destroy(&popup->scene_tree->node);
     free(popup);
 }
