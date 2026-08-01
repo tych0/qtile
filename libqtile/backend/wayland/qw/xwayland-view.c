@@ -748,7 +748,7 @@ static void qw_xwayland_view_handle_request_configure(struct wl_listener *listen
     if (xwayland_view->base.state == FLOATING) {
         // Respect minimum and maximum sizes
         xwayland_view->base.width = event->width;
-        xwayland_view->base.width = event->height;
+        xwayland_view->base.height = event->height;
         // TODO: request resize
         // TODO: request configuration with pending parameters
     } else {
