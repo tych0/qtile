@@ -10,7 +10,7 @@ XEMBED_PROTOCOL_VERSION = 0
 
 
 class Icon(window._Window):
-    _window_mask = EventMask.StructureNotify | EventMask.PropertyChange | EventMask.Exposure
+    _window_mask = EventMask.StructureNotify | EventMask.PropertyChange
 
     def __init__(self, win, qtile, systray):
         window._Window.__init__(self, win, qtile)
@@ -84,7 +84,7 @@ class Systray(base._Widget, window._Window):
 
     _instances = 0
 
-    _window_mask = EventMask.StructureNotify | EventMask.Exposure
+    _window_mask = EventMask.StructureNotify
 
     orientations = base.ORIENTATION_BOTH
 

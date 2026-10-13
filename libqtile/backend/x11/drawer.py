@@ -70,10 +70,13 @@ class Drawer(drawer.Drawer):
         self.conn.conn.core.CreateGC(
             gc,
             self._win.wid,
-            xcffib.xproto.GC.Foreground | xcffib.xproto.GC.Background,
+            xcffib.xproto.GC.Foreground
+            | xcffib.xproto.GC.Background
+            | xcffib.xproto.GC.GraphicsExposures,
             [
                 self.conn.default_screen.black_pixel,
                 self.conn.default_screen.white_pixel,
+                0,
             ],
         )
         return gc

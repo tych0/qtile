@@ -634,7 +634,7 @@ class Connection:
         values = [
             xcffib.xproto.BackPixmap._None,
             0,
-            EventMask.StructureNotify | EventMask.Exposure,
+            EventMask.StructureNotify,
             self.colormap(depth),
         ]
 

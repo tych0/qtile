@@ -423,7 +423,7 @@ class XWindow:
         with PixmapID(self.conn.conn) as pixmap:
             with GContextID(self.conn.conn) as gc:
                 core.CreatePixmap(depth, pixmap, self.wid, outer_w, outer_h)
-                core.CreateGC(gc, pixmap, 0, None)
+                core.CreateGC(gc, pixmap, xcffib.xproto.GC.GraphicsExposures, [0])
                 borders = len(colors)
                 borderwidths = [borderwidth // borders] * borders
                 for i in range(borderwidth % borders):
@@ -1581,7 +1581,6 @@ class Static(_Window, base.Static):
         | EventMask.PropertyChange
         | EventMask.EnterWindow
         | EventMask.FocusChange
-        | EventMask.Exposure
     )
 
     def __init__(self, win, qtile, screen, x=None, y=None, width=None, height=None):
