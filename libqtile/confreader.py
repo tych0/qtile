@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import importlib
-import importlib.abc
-import importlib.machinery
-import importlib.util
+import os
+import shutil
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -20,39 +19,15 @@ class ConfigError(Exception):
     pass
 
 
-class _MigratedSourceLoader(importlib.abc.Loader):
-    """Execute a module from an in-memory (migrated) source string."""
-
-    def __init__(self, path: str, source: str) -> None:
-        self.path = path
-        self.source = source
-
-    def create_module(self, spec):
-        return None
-
-    def exec_module(self, module) -> None:
-        exec(compile(self.source, self.path, "exec"), module.__dict__)
-
-
-class _MigratedSourceFinder(importlib.abc.MetaPathFinder):
+class ConfigMigrated(Exception):
     """
-    Serve migrated source for config files without touching them on disk, so we
-    can check that the migrated config actually loads before writing it back.
+    The config failed to load, but has been migrated on disk to a version that
+    does. Qtile should re-exec itself to pick up the migrated config.
     """
 
-    def __init__(self, sources: dict[Path, str]) -> None:
-        self.sources = sources
 
-    def find_spec(self, fullname, path, target=None):
-        spec = importlib.machinery.PathFinder.find_spec(fullname, path)
-        if spec is None or spec.origin is None:
-            return None
-        source = self.sources.get(Path(spec.origin).resolve())
-        if source is None:
-            return None
-        return importlib.util.spec_from_file_location(
-            fullname, spec.origin, loader=_MigratedSourceLoader(spec.origin, source)
-        )
+# Scratch directory (inside the config directory) used to try out a migrated config.
+MIGRATE_SUBDIR = ".qtile-migrate"
 
 
 config_pyi_header = """
@@ -152,11 +127,12 @@ class Config:
         """
         Load the config file.
 
-        If loading fails and ``auto_migrate`` is set, every available migration
-        is applied (in memory) to the python files in the config's directory and
-        the load is retried. The migrated files are only written back to disk
-        (with backups of the originals) if the migrated config loads
-        successfully; otherwise the original error is raised.
+        If loading fails and ``auto_migrate`` is set, the config directory's
+        python files are migrated into a scratch subdirectory and load tested
+        from there. If that works, the migrated files are moved over the
+        originals (which are kept as backups) and ConfigMigrated is raised, so
+        the caller can re-exec qtile with the migrated config. Otherwise the
+        original error is raised.
         """
         if not self.file_path:
             return
@@ -166,80 +142,89 @@ class Config:
 
         try:
             config = self._import_config(path)
-        except Exception:
-            if not auto_migrate:
+        except Exception as error:
+            if not auto_migrate or not self._migrate(path):
                 raise
-            config = self._load_migrated(path)
-            if config is None:
-                raise
+            raise ConfigMigrated(f"Config was migrated after failing to load: {error}") from error
 
         self.update(**vars(config))
 
-    def _import_config(self, path: Path, reload_submodules: bool = False):
+    def _import_config(self, path: Path):
         name = path.stem
         if name in sys.modules:
             self._reload_config_submodules(path)
             return importlib.reload(sys.modules[name])
-        if reload_submodules:
-            # A previous failed import may have left (unmigrated) submodules cached.
-            self._reload_config_submodules(path)
         return importlib.import_module(name)
 
-    def _load_migrated(self, path: Path):
+    @staticmethod
+    def _forget_config_modules(folder: Path) -> None:
+        """Drop any modules loaded from the config folder (or below) from sys.modules."""
+        for name, module in list(sys.modules.items()):
+            file = getattr(module, "__file__", None)
+            if file is not None and folder in Path(file).parents:
+                del sys.modules[name]
+
+    def _migrate(self, path: Path) -> bool:
         """
-        Try to load the config with all migrations applied. Returns the loaded
-        config module if successful (after writing the migrated sources back
-        to disk), or None if migrations didn't help.
+        Migrate the config into a subdirectory and load test it from there.
+        If it loads, move the migrated files over the originals. Returns True
+        if the config was migrated.
         """
-        from libqtile.scripts.migrate import BACKUP_SUFFIX, file_and_backup, migrate_source
+        from libqtile.scripts.migrate import BACKUP_SUFFIX, migrate_source
 
-        migrated: dict[Path, tuple[str, str]] = {}
-        for py, _ in file_and_backup(path.as_posix()):
-            file = Path(py).resolve()
-            try:
-                original = file.read_text()
-                updated = migrate_source(original)
-            except ImportError:
-                logger.info("libcst is not installed, not attempting config migration")
-                return None
-            except Exception:
-                # e.g. a syntax error that libcst can't parse; nothing to migrate
-                logger.debug("Failed to migrate %s", file, exc_info=True)
-                continue
-            if updated != original:
-                migrated[file] = (original, updated)
-
-        if not migrated:
-            return None
-
-        names = ", ".join(str(f) for f in migrated)
-        logger.warning("Config failed to load, retrying with migrations applied to: %s", names)
-
-        finder = _MigratedSourceFinder({f: updated for f, (_, updated) in migrated.items()})
-        sys.meta_path.insert(0, finder)
+        folder = path.parent.resolve()
+        scratch = folder / MIGRATE_SUBDIR
+        shutil.rmtree(scratch, ignore_errors=True)
         try:
-            config = self._import_config(path, reload_submodules=True)
-        except Exception:
-            logger.exception("Config still fails to load after migration, not saving changes:")
-            return None
-        finally:
-            sys.meta_path.remove(finder)
+            scratch.mkdir()
+            changed = []
+            for py in folder.glob("*.py"):
+                original = py.read_text()
+                try:
+                    updated = migrate_source(original)
+                except ImportError:
+                    logger.info("libcst is not installed, not attempting config migration")
+                    return False
+                except Exception:
+                    # e.g. a syntax error that libcst can't parse
+                    logger.debug("Failed to migrate %s", py, exc_info=True)
+                    updated = original
+                (scratch / py.name).write_text(updated)
+                if updated != original:
+                    changed.append(py.name)
 
-        for file, (original, updated) in migrated.items():
-            backup = file.with_name(file.name + BACKUP_SUFFIX)
+            if not changed:
+                return False
+
+            logger.warning("Config failed to load, trying migrated config in %s", scratch)
+            self._forget_config_modules(folder)
             try:
-                backup.write_text(original)
-                file.write_text(updated)
-            except OSError:
-                logger.exception("Failed to save migrated config to %s", file)
-                continue
-            logger.warning("Saved migrated config to %s (original backed up to %s)", file, backup)
+                Config(scratch / path.name).load(auto_migrate=False)
+            except Exception:
+                logger.exception(
+                    "Config still fails to load after migration, not saving changes:"
+                )
+                return False
+            finally:
+                self._forget_config_modules(folder)
+                while scratch.as_posix() in sys.path:
+                    sys.path.remove(scratch.as_posix())
+
+            for name in changed:
+                shutil.copyfile(folder / name, folder / (name + BACKUP_SUFFIX))
+                os.replace(scratch / name, folder / name)
+                logger.warning("Migrated %s (original backed up with %s)", name, BACKUP_SUFFIX)
+        except OSError:
+            logger.exception("Failed to migrate config:")
+            return False
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
 
         send_notification(
             "Configuration migrated",
             f"Your config was automatically migrated; backups saved with '{BACKUP_SUFFIX}' suffix.",
         )
-        return config
+        return True
 
     def validate(self) -> None:
         """

@@ -295,12 +295,21 @@ def test_auto_migrate_success(migration_dir):
     config_file.write_text(config_src)
 
     f = confreader.Config(config_file)
+    with pytest.raises(confreader.ConfigMigrated):
+        f.load()
+    # what a re-exec'd qtile would do
+    f = confreader.Config(config_file)
     f.load()
     assert f.wmname == "42"
 
     # migrated file is written back, with a backup of the original
     assert "UNSPECIFIED" not in helper.read_text()
     assert (tmp_path / (helper.name + BACKUP_SUFFIX)).read_text() == helper_src
+    assert not (tmp_path / confreader.MIGRATE_SUBDIR).exists()
+    # modules point at the real files, not the scratch dir
+    import sys
+
+    assert sys.modules[names["helper"]].__file__ == str(helper)
     # unchanged files are left alone
     assert config_file.read_text() == config_src
     assert not (tmp_path / (config_file.name + BACKUP_SUFFIX)).exists()
@@ -319,6 +328,7 @@ def test_auto_migrate_still_broken(migration_dir):
     # the migrated config didn't load, so nothing is written back
     assert config_file.read_text() == src
     assert not list(tmp_path.glob("*.bak"))
+    assert not (tmp_path / confreader.MIGRATE_SUBDIR).exists()
 
 
 def test_auto_migrate_disabled(migration_dir):
@@ -331,3 +341,26 @@ def test_auto_migrate_disabled(migration_dir):
     with pytest.raises(ImportError):
         f.load(auto_migrate=False)
     assert config_file.read_text() == src
+
+
+def test_auto_migrate_on_reload(migration_dir):
+    tmp_path, names = migration_dir
+    config_file = tmp_path / f"{names['config']}.py"
+    config_file.write_text("wmname = 'one'\n")
+
+    f = confreader.Config(config_file)
+    f.load()
+    assert f.wmname == "one"
+
+    config_file.write_text("from libqtile.widget.base import UNSPECIFIED\nwmname = 'two'\n")
+    with pytest.raises(confreader.ConfigMigrated):
+        f.load()
+    # e.g. a backend that can't restart loads the migrated config in place
+    f.load(auto_migrate=False)
+    assert f.wmname == "two"
+    assert "UNSPECIFIED" not in config_file.read_text()
+
+    # and later reloads keep picking up edits to the real file
+    config_file.write_text("wmname = 'three'\n")
+    f.load()
+    assert f.wmname == "three"

@@ -45,7 +45,7 @@ from libqtile.config import (
     ScreenRect,
 )
 from libqtile.config import ScratchPad as ScratchPadConfig
-from libqtile.confreader import Config
+from libqtile.confreader import Config, ConfigMigrated
 from libqtile.core.lifecycle import lifecycle
 from libqtile.core.loop import LoopContext
 from libqtile.core.state import QtileState
@@ -124,9 +124,44 @@ class Qtile(CommandObject):
     def unlock(self) -> None:
         self.locked = False
 
-    def load_config(self, initial: bool = False) -> None:
+    def _load_config_file(self, initial: bool = False) -> bool:
+        """
+        Load the config file. If it had to be migrated to load, re-exec qtile
+        with the migrated config (or, if the backend can't restart, load it in
+        place). Returns False if qtile is re-exec'ing.
+        """
         try:
             self.config.load()
+        except ConfigMigrated:
+            if self.core.supports_restarting:
+                logger.warning("Config was migrated, restarting qtile to load it")
+                send_notification("Configuration migrated", "Restarting qtile to load it.")
+                self._reexec(initial=initial)
+                return False
+            logger.warning("Config was migrated, loading it in place")
+            self.config.load(auto_migrate=False)
+        return True
+
+    def _reexec(self, initial: bool = False) -> None:
+        """Stop qtile and re-exec it, preserving the current state."""
+        hook.fire("restart")
+        lifecycle.behavior = lifecycle.behavior.RESTART
+        # startup_once only needs skipping if it has already run
+        lifecycle.no_spawn = self.no_spawn
+        if initial:
+            # nothing is set up yet; just pass on any state we were started with
+            lifecycle.state_file = self._state if isinstance(self._state, str) else None
+        else:
+            state_file = os.path.join(tempfile.gettempdir(), "qtile-state")
+            with open(state_file, "wb") as f:
+                self.dump_state(f)
+            lifecycle.state_file = state_file
+        self._stop()
+
+    def load_config(self, initial: bool = False) -> None:
+        try:
+            if not self._load_config_file(initial=initial):
+                return
             self.config.validate()
         except Exception as e:
             logger.exception("Configuration error:")
@@ -299,18 +334,15 @@ class Qtile(CommandObject):
             raise CommandError(f"Backend does not support restarting: {self.core.name}")
         try:
             self.config.load()
+        except ConfigMigrated:
+            # we're about to restart anyway, which will pick up the migrated config
+            pass
         except Exception as error:
             logger.exception("Preventing restart because of a configuration error:")
             send_notification("Configuration error", str(error.__context__))
             return
 
-        hook.fire("restart")
-        lifecycle.behavior = lifecycle.behavior.RESTART
-        state_file = os.path.join(tempfile.gettempdir(), "qtile-state")
-        with open(state_file, "wb") as f:
-            self.dump_state(f)
-        lifecycle.state_file = state_file
-        self._stop()
+        self._reexec()
 
     def _stop(self) -> None:
         logger.debug("Stopping qtile")
@@ -332,7 +364,8 @@ class Qtile(CommandObject):
         logger.debug("Reloading the configuration file")
 
         try:
-            self.config.load()
+            if not self._load_config_file():
+                return
         except Exception as error:
             logger.exception("Configuration error:")
             send_notification("Configuration error", str(error))
@@ -1367,7 +1400,7 @@ class Qtile(CommandObject):
     @expose_command()
     def validate_config(self) -> None:
         try:
-            self.config.load()
+            self.config.load(auto_migrate=False)
         except Exception as error:
             send_notification("Configuration check", str(error))
         else:

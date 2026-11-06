@@ -21,12 +21,14 @@ class LifeCycle:
         self.behavior = Behavior.NONE
         self.exitcode: int = 0
         self.state_file: str | None = None
+        # Whether the restarted qtile should skip startup_once.
+        self.no_spawn: bool = True
         atexit.register(self._atexit)
 
     def _atexit(self) -> None:
         if self.behavior is Behavior.RESTART:
             argv = sys.argv
-            if "--no-spawn" not in argv:
+            if self.no_spawn and "--no-spawn" not in argv:
                 argv.append("--no-spawn")
             argv = [s for s in argv if not s.startswith("--with-state")]
             if self.state_file is not None:
