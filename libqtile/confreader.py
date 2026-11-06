@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import importlib
+import importlib.abc
+import importlib.machinery
+import importlib.util
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -9,10 +12,47 @@ from typing import Any, Literal
 
 from libqtile.config import Group, IdleInhibitor, IdleTimer, Key, Mouse, Output, Rule, Screen
 from libqtile.layout.base import Layout
+from libqtile.log_utils import logger
+from libqtile.utils import send_notification
 
 
 class ConfigError(Exception):
     pass
+
+
+class _MigratedSourceLoader(importlib.abc.Loader):
+    """Execute a module from an in-memory (migrated) source string."""
+
+    def __init__(self, path: str, source: str) -> None:
+        self.path = path
+        self.source = source
+
+    def create_module(self, spec):
+        return None
+
+    def exec_module(self, module) -> None:
+        exec(compile(self.source, self.path, "exec"), module.__dict__)
+
+
+class _MigratedSourceFinder(importlib.abc.MetaPathFinder):
+    """
+    Serve migrated source for config files without touching them on disk, so we
+    can check that the migrated config actually loads before writing it back.
+    """
+
+    def __init__(self, sources: dict[Path, str]) -> None:
+        self.sources = sources
+
+    def find_spec(self, fullname, path, target=None):
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path)
+        if spec is None or spec.origin is None:
+            return None
+        source = self.sources.get(Path(spec.origin).resolve())
+        if source is None:
+            return None
+        return importlib.util.spec_from_file_location(
+            fullname, spec.origin, loader=_MigratedSourceLoader(spec.origin, source)
+        )
 
 
 config_pyi_header = """
@@ -108,21 +148,98 @@ class Config:
                 if folder in subpath.parents and subpath.exists():
                     importlib.reload(module)
 
-    def load(self):
+    def load(self, auto_migrate: bool = True) -> None:
+        """
+        Load the config file.
+
+        If loading fails and ``auto_migrate`` is set, every available migration
+        is applied (in memory) to the python files in the config's directory and
+        the load is retried. The migrated files are only written back to disk
+        (with backups of the originals) if the migrated config loads
+        successfully; otherwise the original error is raised.
+        """
         if not self.file_path:
             return
 
         path = Path(self.file_path)
-        name = path.stem
         sys.path.insert(0, path.parent.as_posix())
 
-        if name in sys.modules:
-            self._reload_config_submodules(path)
-            config = importlib.reload(sys.modules[name])
-        else:
-            config = importlib.import_module(name)
+        try:
+            config = self._import_config(path)
+        except Exception:
+            if not auto_migrate:
+                raise
+            config = self._load_migrated(path)
+            if config is None:
+                raise
 
         self.update(**vars(config))
+
+    def _import_config(self, path: Path, reload_submodules: bool = False):
+        name = path.stem
+        if name in sys.modules:
+            self._reload_config_submodules(path)
+            return importlib.reload(sys.modules[name])
+        if reload_submodules:
+            # A previous failed import may have left (unmigrated) submodules cached.
+            self._reload_config_submodules(path)
+        return importlib.import_module(name)
+
+    def _load_migrated(self, path: Path):
+        """
+        Try to load the config with all migrations applied. Returns the loaded
+        config module if successful (after writing the migrated sources back
+        to disk), or None if migrations didn't help.
+        """
+        from libqtile.scripts.migrate import BACKUP_SUFFIX, file_and_backup, migrate_source
+
+        migrated: dict[Path, tuple[str, str]] = {}
+        for py, _ in file_and_backup(path.as_posix()):
+            file = Path(py).resolve()
+            try:
+                original = file.read_text()
+                updated = migrate_source(original)
+            except ImportError:
+                logger.info("libcst is not installed, not attempting config migration")
+                return None
+            except Exception:
+                # e.g. a syntax error that libcst can't parse; nothing to migrate
+                logger.debug("Failed to migrate %s", file, exc_info=True)
+                continue
+            if updated != original:
+                migrated[file] = (original, updated)
+
+        if not migrated:
+            return None
+
+        names = ", ".join(str(f) for f in migrated)
+        logger.warning("Config failed to load, retrying with migrations applied to: %s", names)
+
+        finder = _MigratedSourceFinder({f: updated for f, (_, updated) in migrated.items()})
+        sys.meta_path.insert(0, finder)
+        try:
+            config = self._import_config(path, reload_submodules=True)
+        except Exception:
+            logger.exception("Config still fails to load after migration, not saving changes:")
+            return None
+        finally:
+            sys.meta_path.remove(finder)
+
+        for file, (original, updated) in migrated.items():
+            backup = file.with_name(file.name + BACKUP_SUFFIX)
+            try:
+                backup.write_text(original)
+                file.write_text(updated)
+            except OSError:
+                logger.exception("Failed to save migrated config to %s", file)
+                continue
+            logger.warning("Saved migrated config to %s (original backed up to %s)", file, backup)
+
+        send_notification(
+            "Configuration migrated",
+            f"Your config was automatically migrated; backups saved with '{BACKUP_SUFFIX}' suffix.",
+        )
+        return config
 
     def validate(self) -> None:
         """

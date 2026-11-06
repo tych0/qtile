@@ -265,3 +265,69 @@ def test_generate_screens_reuses_existing_screens(
     # Replaced screens' bars must have been finalized: one bar window per
     # remaining screen, no leaks from reconfigure
     assert len(manager_nospawn.c.internal_windows()) == 2
+
+
+@pytest.fixture
+def migration_dir(tmp_path):
+    pytest.importorskip("libcst")
+    import sys
+    import uuid
+
+    suffix = uuid.uuid4().hex
+    names = {"config": f"automigrate_config_{suffix}", "helper": f"automigrate_helper_{suffix}"}
+    yield tmp_path, names
+    for name in names.values():
+        sys.modules.pop(name, None)
+    while tmp_path.as_posix() in sys.path:
+        sys.path.remove(tmp_path.as_posix())
+
+
+def test_auto_migrate_success(migration_dir):
+    from libqtile.scripts.migrate import BACKUP_SUFFIX
+
+    tmp_path, names = migration_dir
+    # The outdated import lives in a submodule, to check those get migrated too.
+    helper = tmp_path / f"{names['helper']}.py"
+    helper_src = "from libqtile.widget.base import UNSPECIFIED\nvalue = 42\n"
+    helper.write_text(helper_src)
+    config_file = tmp_path / f"{names['config']}.py"
+    config_src = f"from {names['helper']} import value\nwmname = str(value)\n"
+    config_file.write_text(config_src)
+
+    f = confreader.Config(config_file)
+    f.load()
+    assert f.wmname == "42"
+
+    # migrated file is written back, with a backup of the original
+    assert "UNSPECIFIED" not in helper.read_text()
+    assert (tmp_path / (helper.name + BACKUP_SUFFIX)).read_text() == helper_src
+    # unchanged files are left alone
+    assert config_file.read_text() == config_src
+    assert not (tmp_path / (config_file.name + BACKUP_SUFFIX)).exists()
+
+
+def test_auto_migrate_still_broken(migration_dir):
+    tmp_path, names = migration_dir
+    config_file = tmp_path / f"{names['config']}.py"
+    src = "from libqtile.widget.base import UNSPECIFIED\nraise RuntimeError('broken')\n"
+    config_file.write_text(src)
+
+    f = confreader.Config(config_file)
+    with pytest.raises(ImportError):
+        f.load()
+
+    # the migrated config didn't load, so nothing is written back
+    assert config_file.read_text() == src
+    assert not list(tmp_path.glob("*.bak"))
+
+
+def test_auto_migrate_disabled(migration_dir):
+    tmp_path, names = migration_dir
+    config_file = tmp_path / f"{names['config']}.py"
+    src = "from libqtile.widget.base import UNSPECIFIED\n"
+    config_file.write_text(src)
+
+    f = confreader.Config(config_file)
+    with pytest.raises(ImportError):
+        f.load(auto_migrate=False)
+    assert config_file.read_text() == src

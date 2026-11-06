@@ -58,6 +58,23 @@ def file_and_backup(config_dir: str) -> Iterator[tuple[str, str]]:
         yield py, backup
 
 
+def migrate_source(code: str) -> str:
+    """
+    Apply every available migration to ``code`` without prompting and return the
+    resulting source. Raises ImportError if libcst is not installed.
+    """
+    import libcst
+
+    load_migrations()
+    source = libcst.metadata.MetadataWrapper(libcst.parse_module(code))
+    for m in MIGRATIONS:
+        migrator = m()
+        migrator.migrate(source)
+        if migrator.updated is not None:
+            source = libcst.metadata.MetadataWrapper(migrator.updated)
+    return source.module.code
+
+
 class QtileMigrate:
     """
     May be overkill to use a class here but we can store state (i.e. args)

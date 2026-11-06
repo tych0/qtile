@@ -102,7 +102,7 @@ def check_config(args):
     try:
         # can we load the config?
         config = confreader.Config(args.configfile)
-        config.load()
+        config.load(auto_migrate=False)
         config.validate()
     except Exception:
         print(traceback.format_exc())
