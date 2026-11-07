@@ -165,6 +165,4 @@ filterwarnings = [
     "error:::test",
     "ignore:::dbus_next",
 ]
-faulthandler_timeout = 360
-faulthandler_exit_on_timeout = true
 timeout = 300 # pytest-timeout
