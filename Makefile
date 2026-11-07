@@ -34,7 +34,7 @@ check: deps ## Run the test suite on the latest python
 	if [ "$$GITHUB_ACTIONS" = "true" ]; then \
 		echo "=== Backtraces ==="; \
 		for corefile in coredumps/core*; do \
-			[ -f "$$corefile" ] && gdb -batch -ex "bt full" -c "$$corefile"; \
+			[ -f "$$corefile" ] && gdb -batch -ex "thread apply all bt" -c "$$corefile"; \
 		done; \
 	fi; \
 	if [ $$TEST_RESULT -ne 0 ]; then exit $$TEST_RESULT; fi
