@@ -1,3 +1,7 @@
+import os
+import signal
+import subprocess
+
 import pytest
 
 import libqtile
@@ -13,6 +17,89 @@ def pytest_addoption(parser):
         choices=("x11", "wayland"),
         help="Test a specific backend. Can be passed more than once.",
     )
+    parser.addini(
+        "watchdog_timeout",
+        "abort the test session if a single test takes longer than this many seconds",
+        default="300",
+    )
+
+
+# A hung test is detected by a watchdog *process* rather than a thread in this
+# process (as faulthandler_timeout and pytest-timeout's thread method use): a
+# thread would make every fork() of the test process a multi-threaded fork,
+# and an in-process signal handler (pytest-timeout's signal method) never
+# runs when the main thread is stuck in C code. On timeout the watchdog:
+#
+# - lists the process tree,
+# - sends SIGUSR2 to those of our children that handle it, so the qtile
+#   instances dump their Python stacks (both TestManager and qtile itself
+#   register faulthandler for it),
+# - copies the hung test's captured stdout/stderr to the real stderr, since
+#   that's where the children's dumps went and pytest won't live to report it,
+# - SIGABRTs this process: pytest's faulthandler plugin dumps our Python
+#   stacks, and the core dump gives the C stacks (CI collects cores).
+#
+# subprocess.Popen() does not trip the multi-threaded fork() warning: it
+# exec()s immediately without running at-fork hooks.
+_WATCHDOG = r"""
+trap '' USR2
+sleep "$1"
+echo "=== test watchdog: $2 still running after $1s, aborting ===" >&2
+ps awfux >&2
+for pid in $(pgrep -P "$3"); do
+    # only signal children that catch SIGUSR2 (bit 11 of SigCgt): for
+    # anything else (Xephyr, test windows, ...) it would be fatal
+    cgt=$(sed -n 's/^SigCgt:\t*//p' /proc/"$pid"/status 2>/dev/null)
+    if [ -n "$cgt" ] && [ $((0x$cgt & 0x800)) -ne 0 ]; then
+        kill -USR2 "$pid"
+    fi
+done
+sleep 1
+if [ "$4" = fd ]; then
+    for f in /proc/"$3"/fd/1 /proc/"$3"/fd/2; do
+        if [ -f "$f" ]; then
+            echo "=== captured output from $f ===" >&2
+            cat "$f" >&2
+        fi
+    done
+fi
+kill -ABRT "$3"
+"""
+
+
+def pytest_configure(config):
+    # global output capture is suspended while pytest_configure runs, so this
+    # is the real stderr even though fd 2 gets redirected during tests
+    config._watchdog_stderr = os.dup(2)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    timeout = float(item.config.getini("watchdog_timeout"))
+    if timeout <= 0:
+        yield
+        return
+    watchdog = subprocess.Popen(
+        [
+            "sh",
+            "-c",
+            _WATCHDOG,
+            "watchdog",
+            str(timeout),
+            item.nodeid,
+            str(os.getpid()),
+            item.config.getoption("capture"),
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=item.config._watchdog_stderr,
+        stderr=item.config._watchdog_stderr,
+        start_new_session=True,
+    )
+    try:
+        yield
+    finally:
+        os.killpg(watchdog.pid, signal.SIGKILL)
+        watchdog.wait()
 
 
 def pytest_cmdline_main(config):
