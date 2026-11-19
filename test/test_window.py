@@ -9,6 +9,7 @@ from test.helpers import (
     SECOND_HEIGHT,
     SECOND_WIDTH,
     WIDTH,
+    Retry,
     window_by_name,
 )
 from test.layouts.layout_utils import assert_focused, assert_unfocused
@@ -704,6 +705,45 @@ def test_fullscreen_on_top(manager):
     window_by_name(manager.c, "two").focus()
     window_by_name(manager.c, "two").toggle_fullscreen()
     assert _clients() == ["two", "one"]
+
+
+@manager_config
+def test_fullscreen_above_bar(manager):
+    """Test a focused fullscreen window is raised above a bar that is above it."""
+
+    if manager.backend.name == "wayland":
+        pytest.skip("X11 only")
+
+    manager.test_window("one")
+    manager.test_window("two", floating=True)
+    window_by_name(manager.c, "two").enable_fullscreen()
+
+    # Simulate the bar being created after the windows (e.g. qtile restarted), which
+    # leaves it at the top of the stack.
+    manager.c.eval("self.screens[0].bottom.window.window.configure(stackmode=0)")
+    bar_wid = manager.c.bar["bottom"].info()["window"]
+    wid = window_by_name(manager.c, "two").info()["id"]
+
+    # Focusing away drops "two" out of the fullscreen layer, focusing it again
+    # should put it back on top, above the bar.
+    @Retry(ignore_exceptions=(AssertionError,))
+    def assert_active(name):
+        active = manager.c.eval(
+            "self.core._root.get_property('_NET_ACTIVE_WINDOW', 'WINDOW', unpack=int)[0]"
+        )
+        assert int(active) == window_by_name(manager.c, name).info()["id"]
+
+    window_by_name(manager.c, "one").focus()
+    assert_active("one")
+    window_by_name(manager.c, "two").focus()
+    assert_active("two")
+
+    @Retry(ignore_exceptions=(AssertionError,))
+    def assert_above_bar():
+        stack = manager.backend.get_all_windows()
+        assert stack.index(wid) > stack.index(bar_wid)
+
+    assert_above_bar()
 
 
 class UnpinFloatsConfig(ManagerConfig):
