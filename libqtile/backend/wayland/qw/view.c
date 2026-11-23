@@ -175,6 +175,28 @@ void qw_view_move_down(struct qw_view *view) {
 
 bool qw_view_is_visible(struct qw_view *view) { return view->content_tree->node.enabled; }
 
+// Returns true if the existing border scene nodes have the same layout (number
+// of layers, layer types and widths) as the requested borders, so they can be
+// updated in place rather than destroyed and recreated.
+static bool qw_view_borders_reusable(struct qw_view *view, const struct qw_border *borders,
+                                     int border_count) {
+    if (view->borders == NULL || view->border_count != border_count) {
+        return false;
+    }
+    for (int i = 0; i < border_count; i++) {
+        if (borders[i].type != QW_BORDER_RECT || view->borders[i].type != QW_BORDER_RECT ||
+            borders[i].width != view->borders[i].width) {
+            return false;
+        }
+        for (int j = 0; j < 4; j++) {
+            if (view->borders[i].rects[j] == NULL) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 // Creates and paints multiple border layers around the view content.
 // borders: array of qw_border for each border.
 // border_count: number of border layers to draw.
@@ -185,14 +207,22 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
         return;
     }
 
-    qw_view_cleanup_borders(view);
+    // place() is called for every window on every layout pass, most of which
+    // don't change the borders at all. Reuse the existing scene rects when we
+    // can: the wlr_scene setters are no-ops (and cause no damage) when the
+    // value is unchanged.
+    bool reuse = qw_view_borders_reusable(view, borders, border_count);
 
-    view->borders = calloc(border_count, sizeof(*view->borders));
-    if (!view->borders) {
-        wlr_log(WLR_ERROR, "Failed to allocate border layer tracking");
-        return;
+    if (!reuse) {
+        qw_view_cleanup_borders(view);
+
+        view->borders = calloc(border_count, sizeof(*view->borders));
+        if (!view->borders) {
+            wlr_log(WLR_ERROR, "Failed to allocate border layer tracking");
+            return;
+        }
+        view->border_count = border_count;
     }
-    view->border_count = border_count;
 
     int total_width = 0;
     for (int i = 0; i < border_count; i++) {
@@ -225,8 +255,15 @@ void qw_view_paint_borders(struct qw_view *view, const struct qw_border *borders
             for (int j = 0; j < 4; j++) {
                 float rect_color[4];
                 qw_util_premultiply_rgba(src->rect.color[j], view->opacity, rect_color);
-                struct wlr_scene_rect *rect = wlr_scene_rect_create(
-                    view->content_tree, sides[j].width, sides[j].height, rect_color);
+                struct wlr_scene_rect *rect;
+                if (reuse) {
+                    rect = view->borders[i].rects[j];
+                    wlr_scene_rect_set_size(rect, sides[j].width, sides[j].height);
+                    wlr_scene_rect_set_color(rect, rect_color);
+                } else {
+                    rect = wlr_scene_rect_create(view->content_tree, sides[j].width,
+                                                 sides[j].height, rect_color);
+                }
                 if (!rect) {
                     wlr_log(WLR_ERROR, "Failed to create scene_rect for border");
                     continue;
