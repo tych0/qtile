@@ -99,6 +99,10 @@ class XWindow:
     def __init__(self, conn, wid):
         self.conn = conn
         self.wid = wid
+        # Last values passed to paint_borders(), so repeated identical calls
+        # (e.g. every layout pass) don't hit the X server again.
+        self._frame_extents = None
+        self._border_key = None
 
     def _property_string(self, r):
         """Extract a string from a window property reply message"""
@@ -405,10 +409,32 @@ class XWindow:
         """
         This method is used only by the managing Window class.
         """
-        self.set_property("_NET_FRAME_EXTENTS", [borderwidth] * 4)
+        # set_property() does a checked (i.e. synchronous) request, so avoid
+        # doing it when the value hasn't changed.
+        if self._frame_extents != borderwidth:
+            self.set_property("_NET_FRAME_EXTENTS", [borderwidth] * 4)
+            self._frame_extents = borderwidth
 
         if not colors or not borderwidth:
+            self._border_key = None
             return
+
+        # Painting a multi-colour border creates two pixmaps and a GC, so skip
+        # it if nothing that affects the result has changed.
+        try:
+            key = (
+                depth,
+                colors if isinstance(colors, str | tuple) else tuple(colors),
+                borderwidth,
+                width,
+                height,
+            )
+            hash(key)
+        except TypeError:
+            key = None
+        if key is not None and key == self._border_key:
+            return
+        self._border_key = key
 
         if isinstance(colors, str):
             self.set_attribute(borderpixel=self.conn.color_pixel(colors))
