@@ -175,6 +175,19 @@ if __name__ == "__main__":
         action="store_true",
         help="Print 'button <n>' to stdout for each mouse press received",
     )
+    parser.add_argument(
+        "--ready-fd",
+        dest="ready_fd",
+        type=int,
+        default=None,
+        help="Write 'ready' to this already-open fd once the window is mapped",
+    )
+    parser.add_argument(
+        "--ready-fifo",
+        dest="ready_fifo",
+        default=None,
+        help="Open this fifo for writing and write 'ready' to it once the window is mapped",
+    )
 
     args = parser.parse_args()
 
@@ -288,8 +301,28 @@ if __name__ == "__main__":
 
         GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_stdin)
 
+    def signal_ready():
+        if args.ready_fd is not None:
+            os.write(args.ready_fd, b"ready\n")
+            os.close(args.ready_fd)
+        elif args.ready_fifo is not None:
+            fifo_fd = os.open(args.ready_fifo, os.O_WRONLY)
+            os.write(fifo_fd, b"ready\n")
+            os.close(fifo_fd)
+
     win.connect("destroy", Gtk.main_quit)
     win.connect("key-press-event", on_key_press)
     win.show_all()
+
+    if args.ready_fd is not None or args.ready_fifo is not None:
+        # Signal readiness once our create+map request has actually reached
+        # the display server -- not once the window is visually mapped,
+        # since the compositor/WM may legitimately manage this window
+        # without ever mapping it (e.g. an exclusive group immediately
+        # reassigning it to a group that isn't on screen). sync() round-trips
+        # with the server, so by the time it returns the request is not just
+        # sent but already processed there.
+        Gdk.Display.get_default().sync()
+        signal_ready()
 
     Gtk.main()
