@@ -339,24 +339,29 @@ class TestManager:
 
             self.testwindows.remove(proc)
 
-    def create_window(self, create, failed=None):
+    def create_window(self, create, wait_ready=None):
         """
-        Uses the function `create` to create a window.
+        Uses the function `create` to create a window, then waits for qtile to
+        see it and returns.
 
-        Waits until qtile actually maps the window and then returns.
+        If `create` only issues requests over a display-server connection the
+        caller already owns (e.g. a raw xcffib window), qtile's own `sync()`
+        is enough to guarantee the window is visible by the time this
+        returns. If `create` spawns an external process instead, pass
+        `wait_ready` -- a zero-argument callable that blocks until that
+        process has deterministically signalled it is mapped (and raises if
+        it dies first) -- since qtile can't see the window until the other
+        process gets around to creating it.
         """
         client = self.c
         start = len(client.windows())
         create()
 
-        @Retry(ignore_exceptions=(RuntimeError,))
-        def success():
-            while failed is None or not failed():
-                if len(client.windows()) > start:
-                    return True
-            raise RuntimeError("window has not appeared yet")
+        if wait_ready is not None:
+            wait_ready()
 
-        return success()
+        self.c.sync()
+        assert len(client.windows()) > start, "window has not appeared yet"
 
     def _spawn_window(self, *args):
         """Starts a program which opens a window
@@ -369,6 +374,7 @@ class TestManager:
             raise AssertionError("Trying to run nothing! (missing arguments)")
 
         proc = None
+        ready_r, ready_w = os.pipe()
 
         def spawn():
             nonlocal proc
@@ -377,14 +383,34 @@ class TestManager:
             env.pop("DISPLAY", None)
             env.pop("WAYLAND_DISPLAY", None)
             env.update(self.backend.env)
-            proc = subprocess.Popen(args, env=env)
+            proc = subprocess.Popen(
+                [*args, "--ready-fd", str(ready_w)],
+                pass_fds=(ready_w,),
+                env=env,
+            )
+            os.close(ready_w)
 
-        def failed():
-            if proc.poll() is not None:
-                return True
-            return False
+        def wait_ready():
+            deadline = time.time() + 10
+            try:
+                while True:
+                    if proc.poll() is not None:
+                        raise AssertionError(
+                            f"process exited (code {proc.returncode}) "
+                            "before signalling that its window was ready"
+                        )
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        raise TimeoutError("window did not signal ready in time")
+                    readable, _, _ = select.select([ready_r], [], [], remaining)
+                    if readable:
+                        if not os.read(ready_r, 16):
+                            raise AssertionError("ready pipe closed unexpectedly")
+                        return
+            finally:
+                os.close(ready_r)
 
-        self.create_window(spawn, failed=failed)
+        self.create_window(spawn, wait_ready=wait_ready)
         self.testwindows.append(proc)
         return proc
 
@@ -400,14 +426,8 @@ class TestManager:
         proc.wait()
         self.testwindows.remove(proc)
 
-        @Retry(ignore_exceptions=(ValueError,))
-        def success():
-            if len(self.c.windows()) < start:
-                return True
-            raise ValueError("window is still in client list!")
-
-        if not success():
-            raise AssertionError("Window could not be killed...")
+        self.c.sync()
+        assert len(self.c.windows()) < start, "Window could not be killed..."
 
     def test_window(
         self,
@@ -466,7 +486,6 @@ class TestManager:
         assert len(seen) == len(screens), "Not all screens had an attached group."
 
 
-@Retry(ignore_exceptions=(AssertionError,))
 def assert_window_died(client, window_info):
     client.sync()
     wid = window_info["id"]
