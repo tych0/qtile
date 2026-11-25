@@ -1,4 +1,10 @@
+import atexit
+import os
+import select
+import shutil
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -7,13 +13,45 @@ import libqtile.config
 import libqtile.layout
 import libqtile.widget
 from libqtile.confreader import Config
-from test.helpers import Retry
 from test.layouts.layout_utils import assert_focus_path, assert_focused
+
+# Dropdowns are spawned by qtile itself (a plain shell command), not by the
+# test harness, so we can't hand the child a pre-opened --ready-fd pipe the
+# way test_window() does. Instead each dropdown name gets its own named fifo
+# that window.py opens and writes to once its window is mapped.
+_READY_DIR = Path(tempfile.mkdtemp(prefix="qtile-test-scratchpad-"))
+atexit.register(shutil.rmtree, _READY_DIR, ignore_errors=True)
+
+
+def _ready_fifo_path(name):
+    path = _READY_DIR / name
+    if not path.exists():
+        os.mkfifo(path)
+    return path
+
+
+def _wait_for_ready(name, timeout=10):
+    fd = os.open(_ready_fifo_path(name), os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        deadline = time.time() + timeout
+        while True:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise TimeoutError(f"dropdown {name!r} did not become ready in time")
+            readable, _, _ = select.select([fd], [], [], remaining)
+            if readable and os.read(fd, 16):
+                return
+    finally:
+        os.close(fd)
 
 
 def spawn_cmd(title):
     script = Path(__file__).parent / "scripts" / "window.py"
-    cmd = f"{sys.executable} {script.as_posix()} --name TestWindow {title} normal"
+    fifo = _ready_fifo_path(title)
+    cmd = (
+        f"{sys.executable} {script.as_posix()} --name TestWindow {title} normal "
+        f"--ready-fifo {fifo.as_posix()}"
+    )
     return cmd
 
 
@@ -67,17 +105,17 @@ class ScratchPadBaseConfig(Config):
 scratchpad_config = pytest.mark.parametrize("manager", [ScratchPadBaseConfig], indirect=True)
 
 
-@Retry(ignore_exceptions=(KeyError,))
 def is_spawned(manager, name, scratch_group="SCRATCHPAD"):
-    manager.c.group[scratch_group].dropdown_info(name)["window"]
-    return True
+    info = manager.c.group[scratch_group].dropdown_info(name)
+    if "window" not in info:
+        _wait_for_ready(name)
+        manager.c.sync()
+        info = manager.c.group[scratch_group].dropdown_info(name)
+    assert "window" in info
 
 
-@Retry(ignore_exceptions=(ValueError,))
 def is_killed(manager, name):
-    if "window" not in manager.c.group["SCRATCHPAD"].dropdown_info(name):
-        return True
-    raise ValueError("not yet killed")
+    assert "window" not in manager.c.group["SCRATCHPAD"].dropdown_info(name)
 
 
 @scratchpad_config
