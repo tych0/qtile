@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import select
+import time
 import typing
 from abc import ABCMeta, abstractmethod
+from collections.abc import Callable
 from typing import Any
 
 from libqtile import config, hook
@@ -18,6 +21,32 @@ if typing.TYPE_CHECKING:
     from libqtile.core.manager import Qtile
 
 
+def drain_fd(
+    fd: int | None, dispatch: Callable[[], None], *, settle: float = 0.02, timeout: float = 1.0
+) -> None:
+    """Call `dispatch` until `fd` stops producing new data for `settle` seconds.
+
+    This lets a round-trip response (e.g. a client acking a compositor request,
+    or another process reacting to an event we just caused) arrive and get
+    processed before giving up, bounded overall by `timeout`.
+    """
+    dispatch()
+    if fd is None:
+        return
+    deadline = time.monotonic() + timeout
+    # A closed/EOF'd fd makes select() return "ready" instantly forever, which
+    # would otherwise spin dispatch() in a tight loop for the whole timeout.
+    # Bound the number of settle-waits directly so that can't happen.
+    max_iterations = max(1, int(timeout / settle))
+    for _ in range(max_iterations):
+        if time.monotonic() >= deadline:
+            return
+        ready, _, _ = select.select([fd], [], [], settle)
+        if not ready:
+            return
+        dispatch()
+
+
 class Core(CommandObject, metaclass=ABCMeta):
     painter: Any
     supports_restarting: bool = True
@@ -25,6 +54,7 @@ class Core(CommandObject, metaclass=ABCMeta):
     idle_inhibitor_manager: IdleInhibitorManager[Any]
     idle_notifier: IdleNotifier
     screen_change_timer: asyncio.TimerHandle | None = None
+    fd: int | None = None
 
     @property
     @abstractmethod
@@ -144,7 +174,14 @@ class Core(CommandObject, metaclass=ABCMeta):
                 qtile.focus_screen(screen.index, warp=False)
 
     def flush(self) -> None:
-        """If needed, flush the backend's event queue."""
+        """Process whatever is currently available on the backend's
+        connection (non-blocking) and push any queued outgoing data.
+
+        This is called pervasively (e.g. after every `call_soon`/`call_later`
+        callback), so it must never block or loop waiting for more to
+        arrive -- `Qtile.sync()` builds the "wait for it to settle" behavior
+        on top of this via `drain_fd`.
+        """
 
     def fire_screen_change(self, event: Any = None) -> None:
         if self.screen_change_timer is not None:

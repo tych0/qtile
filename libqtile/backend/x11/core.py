@@ -209,7 +209,7 @@ class Core(base.Core):
         """
         logger.debug("Adding io watch")
         self.fd = self.conn.conn.get_file_descriptor()
-        asyncio.get_running_loop().add_reader(self.fd, self._xpoll)
+        asyncio.get_running_loop().add_reader(self.fd, self.flush)
 
     def remove_listener(self) -> None:
         """Remove the listener from the given event loop"""
@@ -328,8 +328,11 @@ class Core(base.Core):
             if not ret:
                 break
 
-    def _xpoll(self) -> None:
-        """Poll the connection and dispatch incoming events"""
+    def flush(self) -> None:
+        """Dispatch all events currently queued on the connection and push
+        outgoing requests. Registered as the asyncio reader callback for the
+        X11 connection's fd, and called pervasively elsewhere (see
+        `base.Core.flush`), so this must not block or loop."""
         while True:
             try:
                 event = self.conn.conn.poll_for_event()
@@ -388,7 +391,7 @@ class Core(base.Core):
         if self._motion_notify:
             self.handle_event(self._motion_notify)
             self._motion_notify = None
-        self.flush()
+        self.conn.flush()
 
     def _get_target_chain(self, event) -> list[Callable]:
         """Returns a chain of targets that can handle this event
@@ -960,9 +963,6 @@ class Core(base.Core):
             # In X11 backend, current_window is always an x11 _Window
             assert isinstance(win, window._Window)
             win._grab_click()
-
-    def flush(self):
-        self.conn.flush()
 
     def get_mouse_position(self) -> tuple[int, int]:
         """

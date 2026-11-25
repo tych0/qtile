@@ -28,6 +28,7 @@ from libqtile.command.base import (
     CommandException,
     CommandObject,
     ItemT,
+    allow_when_locked,
     expose_command,
 )
 from libqtile.command.client import InteractiveCommandClient
@@ -1502,11 +1503,14 @@ class Qtile(CommandObject):
         return "OK"
 
     @expose_command()
+    @allow_when_locked
     def sync(self) -> None:
         """
-        Sync the backend's event queue. Should only be used for development.
+        Drain the backend's event queue, processing everything currently pending
+        and briefly waiting for any events that result (e.g. another process
+        reacting to something we just did) to settle. Mainly useful for tests.
         """
-        self.core.flush()
+        base.drain_fd(self.core.fd, self.core.flush)
 
     @expose_command()
     def to_screen(self, n: int) -> None:
