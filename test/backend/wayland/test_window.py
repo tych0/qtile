@@ -1,11 +1,43 @@
+import atexit
+import os
+import select
+import shutil
+import tempfile
+import time
+from pathlib import Path
+
 import pytest
 
 import libqtile.layout
 from libqtile.backend.wayland._ffi import lib
 from test.backend.wayland.conftest import new_layer_client, new_xdg_client
 from test.conftest import BareConfig
-from test.helpers import Retry, window_by_name
+from test.helpers import window_by_name
 from test.layouts.test_common import AllLayoutsConfig
+
+# test_client spawns window.py directly (not via wmanager.test_window()), so
+# it doesn't get a --ready-fd pipe automatically. Use a named fifo instead,
+# the same way test_scratchpad.py does for qtile-spawned dropdowns.
+_READY_DIR = Path(tempfile.mkdtemp(prefix="qtile-test-window-"))
+atexit.register(shutil.rmtree, _READY_DIR, ignore_errors=True)
+_CLICK_READY_FIFO = _READY_DIR / "click-test"
+os.mkfifo(_CLICK_READY_FIFO)
+
+
+def _wait_for_ready(path, timeout=10):
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        deadline = time.time() + timeout
+        while True:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise TimeoutError(f"{path} did not become ready in time")
+            readable, _, _ = select.select([fd], [], [], remaining)
+            if readable and os.read(fd, 16):
+                return
+    finally:
+        os.close(fd)
+
 
 try:
     # Check to see if we should skip layer shell tests
@@ -162,15 +194,18 @@ def test_window_opacity_commands(wmanager):
 
 @pytest.mark.parametrize(
     "test_client",
-    [("../../scripts/window.py", ["--print-clicks"])],
+    [
+        (
+            "../../scripts/window.py",
+            ["--print-clicks", "--ready-fifo", _CLICK_READY_FIFO.as_posix()],
+        )
+    ],
     indirect=True,
 )
 def test_window_receives_click(wmanager, test_client):
-    @Retry(ignore_exceptions=(AssertionError,))
-    def wait_for_window(empty=False):
-        assert (len(wmanager.c.windows()) > 0) is not empty
-
-    wait_for_window()
+    _wait_for_ready(_CLICK_READY_FIFO)
+    wmanager.c.sync()
+    assert len(wmanager.c.windows()) > 0
 
     info = wmanager.c.window.info()
     x = info["x"] + info["width"] // 2
