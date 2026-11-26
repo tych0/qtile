@@ -359,6 +359,11 @@ def test_changegroup(manager_nospawn):
 def test_focus_change(manager_nospawn):
     @Retry(ignore_exceptions=(AssertionError))
     def assert_inc_calls(num: int):
+        # Some of the actions below (e.g. window.kill()) only queue an async
+        # request to the client; nothing flushes it to the wire until we
+        # drain, so retry each attempt with a fresh sync() rather than just
+        # waiting for the value to change on its own.
+        manager_nospawn.c.sync()
         assert manager_nospawn.focus_change_calls.value == num
 
     def inc_focus_change_calls():
@@ -455,6 +460,11 @@ class CallGroupWindow:
 
 @Retry(ignore_exceptions=(AssertionError))
 def assert_group_window(mgr_nospawn, group, window):
+    # Some callers trigger this via window.kill(), which only queues an async
+    # request to the client; nothing flushes it to the wire until we drain,
+    # so retry each attempt with a fresh sync() rather than just waiting for
+    # the value to change on its own.
+    mgr_nospawn.c.sync()
     assert mgr_nospawn.c.eval("self.config.test.group") == group
     assert mgr_nospawn.c.eval("self.config.test.window") == window
 
@@ -494,6 +504,11 @@ class CallWindow:
 
 @Retry(ignore_exceptions=(AssertionError))
 def assert_window(mgr_nospawn, window):
+    # Some callers trigger this via window.kill(), which only queues an async
+    # request to the client; nothing flushes it to the wire until we drain,
+    # so retry each attempt with a fresh sync() rather than just waiting for
+    # the value to change on its own.
+    mgr_nospawn.c.sync()
     assert mgr_nospawn.c.eval("self.config.test.window") == window
 
 
