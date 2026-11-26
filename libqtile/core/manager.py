@@ -1086,6 +1086,13 @@ class Qtile(CommandObject):
         event queue after func is called."""
 
         def f() -> None:
+            if self._stopped_event.is_set():
+                # Shutdown has started: graceful_shutdown()/finalize() may
+                # already be tearing down (or have torn down) widgets/scene
+                # objects that a queued callback -- e.g. a bar redraw queued
+                # by an event that arrived right before we were asked to
+                # stop -- could otherwise still try to touch.
+                return
             func(*args)
             self.core.flush()
 
@@ -1095,6 +1102,8 @@ class Qtile(CommandObject):
         """Another event loop proxy, see `call_soon`."""
 
         def f() -> None:
+            if self._stopped_event.is_set():
+                return
             func(*args)
             self.core.flush()
 
@@ -1104,6 +1113,8 @@ class Qtile(CommandObject):
         """Another event loop proxy, see `call_soon`."""
 
         def f() -> None:
+            if self._stopped_event.is_set():
+                return
             func(*args)
             self.core.flush()
 

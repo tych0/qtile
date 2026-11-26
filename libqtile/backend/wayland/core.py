@@ -273,6 +273,12 @@ class Core(base.Core):
     def __init__(self) -> None:
         # this Internal window receives keyboard input, e.g. via the Prompt widget.
         self.focused_internal: base.Internal | None = None
+        # set just before qw_server_finalize() forcibly destroys any clients
+        # that didn't close during graceful_shutdown(). Their unmap signals
+        # still fire during that teardown, which would otherwise reach
+        # Python and try to reflow a layout (potentially resizing/placing an
+        # internal view, e.g. a bar) that finalize() may have already freed.
+        self._finalizing = False
 
         """Setup the Wayland core backend"""
         lib.qw_log_init(get_wlr_log_level(), lib.log_cb)
@@ -543,6 +549,14 @@ class Core(base.Core):
             self.check_screen_fullscreen_background(win.group.screen)
 
     def handle_unmanage_view(self, view: ffi.CData) -> None:
+        if self._finalizing:
+            # qw_server_finalize() forcibly destroys any clients that didn't
+            # close during graceful_shutdown(), which fires this same unmap
+            # path. The process is exiting regardless, and _finalize_configurables()
+            # may have already freed widgets/bars that a layout reflow here
+            # would try to resize or reposition (e.g. qw_internal_view_place
+            # on an already-freed internal view) -- so there's nothing to do.
+            return
         self.qtile.unmanage(view.wid)
         self.check_screen_fullscreen_background()
 
@@ -599,6 +613,7 @@ class Core(base.Core):
             win.activate_by_config()
 
     def finalize(self) -> None:
+        self._finalizing = True
         lib.qw_server_finalize(self.qw)
 
     @property
