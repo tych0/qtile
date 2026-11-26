@@ -83,7 +83,11 @@ def test_systray_icons(manager_nospawn, minimal_conf_noscreen, backend_name):
 
     @Retry(ignore_exceptions=(AssertionError))
     def wait_for_icons():
+        # Icon count updates before positions are recalculated, so check both
+        # under this same retry or we can see the pre-reposition (0, 10)
+        # coordinates on an iteration where only the count has caught up.
         assert int(manager_nospawn.c.widget["systray"].eval("len(self.tray_icons)")) == 2
+        assert int(manager_nospawn.c.widget["systray"].eval("self.tray_icons[0].x")) == 3
 
     if backend_name == "wayland":
         pytest.skip("Skipping test on Wayland.")
