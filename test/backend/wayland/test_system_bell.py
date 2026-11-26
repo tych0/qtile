@@ -4,7 +4,6 @@ from libqtile import hook, widget
 from libqtile.bar import Bar
 from libqtile.config import Screen
 from libqtile.confreader import Config
-from test.helpers import Retry
 
 
 class SystemBellConfig(Config):
@@ -36,13 +35,11 @@ def test_system_bell_no_surface(wmanager, test_client):
 def test_system_bell_with_window(wmanager, test_client):
     """If system bell is rung with no surface attached, the hook will receive the relevant window."""
 
-    @Retry(ignore_exceptions=(AssertionError,))
-    def wait_for_window():
-        assert len(wmanager.c.windows()) == 1
-
-    # Create a client window and get its ID
+    # Create a client window and get its ID. assert_ok() already round-trips
+    # with the compositor, so the window is fully mapped by the time it
+    # returns.
     test_client.assert_ok("show")
-    wait_for_window()
+    assert len(wmanager.c.windows()) == 1
     wid = wmanager.c.windows()[0]["id"]
 
     # Ring the bell and check that the widget receives the correct window

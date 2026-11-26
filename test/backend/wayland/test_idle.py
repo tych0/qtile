@@ -31,7 +31,7 @@ def test_idle_notify(wmanager, test_client):
 
     # Trigger activity and verify resumed message
     wmanager.c.core.idle_notify_activity()
-    wmanager.c.core.flush()
+    wmanager.c.sync()
     test_client.assert_line("resumed")
 
     # Unsubscribe notification timer

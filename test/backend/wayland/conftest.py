@@ -373,7 +373,7 @@ class ClientHandler:
         self._run()
 
     def flush_manager(self):
-        self.manager.c.core.flush()
+        self.manager.c.sync()
 
     def clone(self, start=True):
         clone = ClientHandler(self.cmd, self.manager)

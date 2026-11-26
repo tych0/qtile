@@ -1,11 +1,13 @@
 import pytest
 
 from test.conftest import dualmonitor
-from test.helpers import Retry
 
 
-@Retry(ignore_exceptions=(AssertionError,))
 def wait_for_outputs(client, num=1):
+    # assert_ok() flushes qtile's wayland connection (via ClientHandler's
+    # flush_manager()) both before and after writing the command, so any
+    # pending output-global events are already settled by the time the
+    # client processes this.
     client.assert_ok(f"outputs {num}")
 
 

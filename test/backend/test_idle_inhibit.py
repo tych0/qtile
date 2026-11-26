@@ -3,7 +3,6 @@ import pytest
 from libqtile.backend.base.idle_inhibit import IdleInhibitorManager
 from libqtile.config import IdleInhibitor, Match
 from libqtile.confreader import Config
-from test.helpers import Retry
 
 
 class FakeQtile:
@@ -39,8 +38,11 @@ def is_inhibited(manager):
     return len(manager.c.core.get_idle_inhibitors(active_only=True)) > 0
 
 
-@Retry(ignore_exceptions=(AssertionError,))
 def wait_for_windows(manager, count):
+    # test_window() already blocks until qtile sees a newly-created window, but
+    # this is also used after window.kill(), which asks an external process to
+    # close itself -- sync() drains+settles so that reaction is reflected too.
+    manager.c.sync()
     assert len(manager.c.windows()) == count
 
 

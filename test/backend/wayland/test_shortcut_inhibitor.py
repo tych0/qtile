@@ -2,7 +2,7 @@ import pytest
 
 from libqtile.config import Key
 from libqtile.lazy import lazy
-from test.helpers import BareConfig, Retry
+from test.helpers import BareConfig
 
 
 class ShorcutInhibitorConfig(BareConfig):
@@ -26,10 +26,6 @@ def test_shortcut_inhibitor(test_client, wmanager, virtual_keyboard):
     def assert_group(name):
         assert wmanager.c.group.info()["name"] == name
 
-    @Retry(ignore_exceptions=(AssertionError,))
-    def wait_for_windows(count):
-        assert len(wmanager.c.windows()) == count
-
     assert_group("a")
 
     # Verify that keyboard events work
@@ -38,9 +34,11 @@ def test_shortcut_inhibitor(test_client, wmanager, virtual_keyboard):
     virtual_keyboard.assert_ok("clear_modifiers")
     assert_group("b")
 
-    # Check that a client receives key presses
+    # Check that a client receives key presses. assert_ok() already
+    # round-trips with the compositor, so the window is fully mapped by the
+    # time it returns.
     test_client.assert_ok("show")
-    wait_for_windows(1)
+    assert len(wmanager.c.windows()) == 1
     virtual_keyboard.assert_ok(f"tap {KEY_A}")
     lines = test_client.send_read_until("get_keypress", "OK")
     assert lines

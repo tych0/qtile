@@ -4,7 +4,7 @@ from libqtile.bar import Bar
 from libqtile.config import Screen
 from test.backend.wayland.helpers import count_node_types, find_layer
 from test.conftest import dualmonitor
-from test.helpers import BareConfig, Retry
+from test.helpers import BareConfig
 
 pytestmark = pytest.mark.parametrize("test_client", ["layer-shell"], indirect=True)
 
@@ -44,10 +44,6 @@ class LSConfigRight(BareConfig):
 def test_layer_shell_exclusive_space_window(test_client, wmanager, anchors, diffs):
     """Test that window position is adjusted for exclusive space."""
 
-    @Retry(ignore_exceptions=(AssertionError,))
-    def wait_for_window():
-        assert len(wmanager.c.windows()) == 1
-
     def xywh():
         info = wmanager.c.window.info()
         x = info["x"]
@@ -56,8 +52,9 @@ def test_layer_shell_exclusive_space_window(test_client, wmanager, anchors, diff
         h = info["height"]
         return x, y, w, h
 
+    # test_window() already blocks until qtile sees the window.
     wmanager.test_window("win")
-    wait_for_window()
+    assert len(wmanager.c.windows()) == 1
     orig = xywh()
 
     clones = []
@@ -127,18 +124,14 @@ def test_layer_shell_layer(test_client, wmanager, layer_name):
 @pytest.mark.parametrize("mode,expected", [("none", False), ("exclusive", True)])
 def test_layer_shell_keyboard_interactivity(test_client, wmanager, mode, expected):
     """Test whether the layer surface gets keyboard focus."""
-
-    @Retry(ignore_exceptions=(AssertionError,))
-    def wait_for_window():
-        assert len(wmanager.c.windows()) == 1
-
     test_client.assert_ok(f"keyboard {mode}")
     test_client.assert_ok("show")
 
     test_client.assert_true_or_false("has_keyboard", expected)
 
+    # test_window() already blocks until qtile sees the window.
     wmanager.test_window("new_client")
-    wait_for_window()
+    assert len(wmanager.c.windows()) == 1
 
     test_client.assert_true_or_false("has_keyboard", expected)
 

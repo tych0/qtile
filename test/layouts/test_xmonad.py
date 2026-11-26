@@ -3,7 +3,6 @@ import pytest
 import libqtile.config
 from libqtile import layout
 from libqtile.confreader import Config
-from test.helpers import Retry
 from test.layouts.layout_utils import assert_dimensions, assert_focus_path, assert_focused
 
 
@@ -647,8 +646,10 @@ def test_tall_stacked_toggle_auto_maximize(manager):
 
 @monadtallstacked_config
 def test_tall_stacked_window_kill(manager):
-    @Retry(ignore_exceptions=(AssertionError))
     def assert_window_count(num):
+        # window.kill() asks the external process to close itself; sync()
+        # drains+settles so that reaction is reflected before we check.
+        manager.c.sync()
         assert len(manager.c.windows()) == num
 
     manager.test_window("one")
